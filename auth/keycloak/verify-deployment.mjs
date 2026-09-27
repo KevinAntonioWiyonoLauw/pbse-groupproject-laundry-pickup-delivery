@@ -183,9 +183,54 @@ async function main() {
   const order = await created.json();
   check(created.status === 201, `create order -> 201 (got ${created.status})`);
 
+  // ---------------------------------------------------------------- P5
+  // Browser-facing behaviour. These are checked against the deployment
+  // because two of them only fail behind a real intermediary: Cloudflare
+  // re-encodes responses and weakens the validator, which breaks `If-Match`
+  // unless the service compares the opaque value rather than requiring a
+  // strong tag.
+  console.log('');
+  console.log('--- browser client behaviour ---');
+
+  const preflight = await fetch(`${api}/v1/orders`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'http://localhost:5173',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'authorization,idempotency-key,if-match',
+    },
+  });
+  const acao = preflight.headers.get('access-control-allow-origin');
+  check(preflight.status === 204, `CORS preflight -> 204 (got ${preflight.status})`);
+  check(acao === 'http://localhost:5173',
+    `CORS allow-origin echoed for a registered origin (got ${acao ?? 'absent'})`);
+  check((preflight.headers.get('access-control-expose-headers') ?? '').includes('ETag'),
+    'ETag is exposed so a browser can read it');
+  check((preflight.headers.get('vary') ?? '').includes('Origin'),
+    'Vary: Origin present (required behind a cache)');
+
+  const foreignOrigin = await fetch(`${api}/v1/orders`, {
+    method: 'OPTIONS',
+    headers: { Origin: 'https://not-registered.example', 'Access-Control-Request-Method': 'GET' },
+  });
+  check(!foreignOrigin.headers.get('access-control-allow-origin'),
+    'unregistered origin is never reflected');
+
   if (created.status === 201) {
     const own = await call(studentA.access_token, `/v1/orders/${order.id}`);
     check(own.status === 200, `owner reads own order -> 200 (got ${own.status})`);
+
+    // Conditional read. The validator a browser holds may have been weakened
+    // by the proxy, so both forms are exercised.
+    const etag = own.headers.get('etag');
+    check(Boolean(etag), `ETag present on a single entity (got ${etag ?? 'absent'})`);
+    if (etag) {
+      const notModified = await call(studentA.access_token, `/v1/orders/${order.id}`, {
+        headers: { 'If-None-Match': etag },
+      });
+      check(notModified.status === 304,
+        `unchanged read -> 304 (got ${notModified.status})`);
+    }
 
     const foreign = await call(studentB.access_token, `/v1/orders/${order.id}`);
     const absent = await call(studentB.access_token, '/v1/orders/ord_doesnotexist');
@@ -194,13 +239,34 @@ async function main() {
     check(foreign.status === 404, `other caller's object -> 404 (got ${foreign.status})`);
     check(foreignBody === absentBody, 'absent and not-owned 404 bodies are identical');
 
+    // Staff intake queue: the collection and the detail must agree, or an
+    // order shows up in the queue and answers 404 when opened.
+    const staffQueue = await call(staffA.access_token, '/v1/orders?status=pending_pickup');
+    const queue = await staffQueue.json();
+    check(Array.isArray(queue) && queue.some((o) => o.id === order.id),
+      `staff sees an unbound order in the intake queue (got ${Array.isArray(queue) ? queue.length : 'n/a'})`);
+    const staffRead = await call(staffA.access_token, `/v1/orders/${order.id}`);
+    check(staffRead.status === 200,
+      `staff can open the order from that queue (got ${staffRead.status})`);
+
+    // Conditional write. `ifMatch` is deliberately the value the browser
+    // holds, which behind Cloudflare carries the weak prefix.
     const claimRes = await call(staffA.access_token, `/v1/orders/${order.id}/fulfilment`, {
       method: 'POST',
+      headers: etag ? { 'If-Match': etag } : {},
     });
     const claimed = await claimRes.json();
-    check(claimRes.status === 200, `staff fulfilment -> 200 (got ${claimRes.status})`);
+    check(claimRes.status === 200,
+      `conditional write with the browser's validator -> 200 (got ${claimRes.status})`);
     check(claimed.outletId === 'outlet_a',
       `outlet taken from token claim (got ${claimed.outletId})`);
+
+    const stale = await call(staffA.access_token, `/v1/orders/${order.id}/fulfilment`, {
+      method: 'POST',
+      headers: etag ? { 'If-Match': etag } : {},
+    });
+    check(stale.status === 412,
+      `stale validator -> 412, a normal condition (got ${stale.status})`);
   }
 
   console.log('');

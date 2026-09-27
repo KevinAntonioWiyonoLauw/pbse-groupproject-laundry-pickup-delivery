@@ -249,8 +249,11 @@ Backend service aktif dan dapat diakses publik:
 - **Base API Path:** `https://pbse.kevinio.my.id/v1`
 - **Authorization Server:** `https://keycloak-production-68f0.up.railway.app/realms/laundry`
 - **Audience:** `laundry-api`
+- **Kontrak:** `1.3.0`
 
-Endpoint protected menjawab `401` tanpa token. Verifikasi menyeluruh, termasuk
+Endpoint protected menjawab `401` tanpa token. `CORS_ALLOWED_ORIGINS` harus
+diisi pada environment Railway; origin yang tidak terdaftar tidak akan pernah
+menerima `Access-Control-Allow-Origin`. Verifikasi menyeluruh, termasuk
 penerimaan token asli, dijalankan dengan:
 
 ```bash
@@ -323,6 +326,63 @@ memerlukan backend-for-frontend yang sudah ditolak pada ADR 0003. Karena
 access token berumur 300 detik, jendela penyalahgunaan dibatasi oleh masa
 berlakunya; refresh token tetap menjadi target utama dan karena itu refresh
 dikoordinasikan antar-tab agar reuse tidak mencabut seluruh token family.
+
+### Dua jebakan production yang sudah ditutup
+
+Keduanya hanya muncul setelah deploy, tidak terlihat di localhost, dan sudah
+diperbaiki beserta test regresinya.
+
+**1. Proxy melemahkan ETag, sehingga `If-Match` tidak pernah cocok.**
+
+Cloudflare meng-encode ulang respons JSON dengan Brotli, dan ketika sebuah
+intermediary mentransformasi representasi ia **melemahkan** validator menjadi
+`W/"..."` — perilaku yang benar menurut RFC 9110. Yang tidak benar adalah
+akibatnya di sisi kami: `If-Match` dibandingkan dengan *strong comparison*,
+sehingga tag weak tidak akan pernah cocok dan browser menerima `412` pada
+write **pertama**, bukan hanya saat konflik.
+
+Diukur langsung terhadap deployment:
+
+| Request | ETag diterima | Encoding |
+|---|---|---|
+| default (browser) | `W/"aiNfDU1j..."` | `br` |
+| `Accept-Encoding: identity` | `"aiNfDU1j..."` | — |
+
+Perbaikannya: `matchesIfMatch` membandingkan **nilai** validator dan
+mengabaikan prefix weak. Aman di sini karena tag ini adalah penanda versi
+entitas, bukan checksum byte: `W/"abc"` dan `"abc"` menamai versi yang sama,
+dan itulah persis yang ditanyakan `If-Match`. Strong comparison ada untuk
+melindungi operasi byte-exact seperti range request, yang tidak disediakan API
+ini. `Cache-Control: no-transform` juga dikirim untuk menghentikan pelemahan
+di sumbernya. Regresi dikunci oleh `tests/web/test-weak-etag.js`.
+
+**2. Proses abort saat shutdown, sehingga deploy sehat terlihat gagal.**
+
+Railway melaporkan deploy sebagai crash karena proses keluar dengan kode
+`134`:
+
+```
+Statement::~Statement() [better_sqlite3.node]
+node::RemoveEnvironmentCleanupHook(...) at ../src/api/hooks.cc:142
+Assertion failed: (env) != nullptr
+Aborted
+```
+
+Setiap store menyiapkan prepared statement di module scope, jadi statement itu
+masih terbuka saat proses berakhir. Tanpa signal handler, Node lebih dulu
+meruntuhkan environment V8, lalu destructor native berjalan pada environment
+yang sudah mati. Service sendiri sehat sepanjang waktu — crash hanya terjadi di
+jalur keluar, dan platform membaca exit code non-zero sebagai deploy gagal.
+
+Perbaikannya: jalur shutdown eksplisit pada `SIGTERM`/`SIGINT` — berhenti
+menerima koneksi, tutup handle SQLite selagi runtime masih utuh, lalu `exit 0`.
+Diverifikasi di Linux (platform deployment): `docker stop` menghasilkan exit
+code **137 tanpa perbaikan** dan **0 dengan perbaikan**. Regresi dikunci oleh
+`tests/web/test-graceful-shutdown.js`.
+
+> Windows tidak memiliki signal POSIX, sehingga test shutdown melaporkan jalur
+> signal sebagai **dilewati** di sana, bukan lulus diam-diam. Verifikasi
+> otoritatifnya berjalan di CI (Linux) dan lewat Docker.
 
 ### Temuan terhadap kontrak
 
