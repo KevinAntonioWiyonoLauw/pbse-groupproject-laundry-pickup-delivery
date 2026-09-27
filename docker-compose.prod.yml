@@ -11,6 +11,10 @@ services:
       OIDC_ISSUER: ${OIDC_ISSUER:?OIDC_ISSUER is required}
       OIDC_JWKS_URI: ${OIDC_JWKS_URI:?OIDC_JWKS_URI is required}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:?OIDC_AUDIENCE is required}
+      # Origin of the deployed web client. Empty means no browser origin may
+      # read this service, which is the correct default for a service that is
+      # only reached by tests and server-side clients.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
     volumes:
       - laundry_data:/app/service/db
     networks:

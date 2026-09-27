@@ -201,6 +201,116 @@ async function ensureUserAttributes(api) {
 }
 
 /**
+ * Declare the identity attributes in the realm's user profile.
+ *
+ * Keycloak 24+ validates users against a declarative profile, and an attribute
+ * that is not declared there is silently discarded: the admin API answers
+ * `204 No Content` and the value never appears on the user. The failure is
+ * invisible from the API response, and the symptom downstream is worse — the
+ * service falls back to `sub`, so every ownership comparison is a Keycloak
+ * UUID against a domain identifier and every object is answered `404`.
+ *
+ * Declaring the two attributes is preferred over enabling
+ * `unmanagedAttributePolicy`, which would accept any attribute at all.
+ */
+async function ensureUserProfile(api) {
+  // `actor` is not read by the resource server, which derives the caller kind
+  // from `realm_access.roles`. It is declared so the template's user
+  // attributes are stored rather than silently dropped, which keeps the
+  // read-back below meaningful for every attribute the template sets.
+  const WANTED = ['fixture_domain_id', 'outlet_id', 'actor'];
+  const profile = await (await api('/users/profile')).json();
+  const declared = new Set((profile.attributes || []).map((a) => a.name));
+  const missing = WANTED.filter((name) => !declared.has(name));
+
+  if (missing.length === 0) {
+    console.log(`user profile: ${WANTED.join(', ')} already declared`);
+    return;
+  }
+
+  profile.attributes = [
+    ...(profile.attributes || []),
+    ...missing.map((name) => ({
+      name,
+      displayName: name
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' '),
+      validations: {},
+      annotations: {},
+      // Readable by the user and by an administrator, writable by an
+      // administrator only: these bind an identity to a domain object and must
+      // not be self-assigned.
+      permissions: { view: ['admin', 'user'], edit: ['admin'] },
+      multivalued: false,
+    })),
+  ];
+
+  await api('/users/profile', { method: 'PUT', body: JSON.stringify(profile) });
+  console.log(`user profile: declared ${missing.join(', ')}`);
+}
+
+/**
+ * Read the attributes back and assert they were actually stored.
+ *
+ * Without this read-back the script reports success for a write Keycloak
+ * dropped, which is exactly how a realm can look configured while every
+ * ownership rule in the service fails.
+ */
+async function verifyUserAttributes(api) {
+  const wanted = realmJson.users.filter((u) => u.attributes);
+  for (const spec of wanted) {
+    const found = (await (await api(`/users?username=${encodeURIComponent(spec.username)}&exact=true`)).json())[0];
+    assert.ok(found, `user '${spec.username}' not found in realm '${realmName}'`);
+    const stored = found.attributes || {};
+    for (const [name, value] of Object.entries(spec.attributes)) {
+      assert.equal(
+        stored[name]?.[0],
+        value[0],
+        `attribute '${name}' on '${spec.username}' was not stored (got ${JSON.stringify(stored[name])}); is it declared in the user profile?`,
+      );
+    }
+    console.log(`'${spec.username}': attributes verified`);
+  }
+}
+
+/**
+ * Attach extra redirect URIs and web origins to a public client.
+ *
+ * Additive and idempotent: existing entries are never removed, so the local
+ * development origin survives alongside the deployed one. Entries are matched
+ * exactly, with no wildcard and no prefix matching.
+ */
+async function ensureClientOrigins(api, clientId, origins) {
+  if (origins.length === 0) return;
+
+  const clients = await (await api(`/clients?clientId=${encodeURIComponent(clientId)}`)).json();
+  const client = clients.find((c) => c.clientId === clientId);
+  assert.ok(client, `client '${clientId}' not found in realm '${realmName}'`);
+
+  const redirectUris = new Set(client.redirectUris || []);
+  const webOrigins = new Set(client.webOrigins || []);
+  const added = [];
+
+  for (const origin of origins) {
+    const callback = `${origin}/callback`;
+    if (!redirectUris.has(callback)) { redirectUris.add(callback); added.push(callback); }
+    if (!webOrigins.has(origin)) { webOrigins.add(origin); added.push(origin); }
+  }
+
+  if (added.length === 0) {
+    console.log(`'${clientId}': origins already registered`);
+    return;
+  }
+
+  await api(`/clients/${client.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...client, redirectUris: [...redirectUris], webOrigins: [...webOrigins] }),
+  });
+  console.log(`'${clientId}': registered ${added.join(', ')}`);
+}
+
+/**
  * Read the mappers back and assert the claims the resource server depends on
  * are actually published by the scopes attached to the public clients.
  *
@@ -258,7 +368,17 @@ async function main() {
     scopeByName[name] = await ensureClientScope(api, name);
   }
   await ensureClientScopeBinding(api, scopeByName);
+  // Profile first: an attribute that is not declared is discarded without an
+  // error, so writing attributes before declaring them silently does nothing.
+  await ensureUserProfile(api);
   await ensureUserAttributes(api);
+  await verifyUserAttributes(api);
+
+  // Extra origins for the deployed web client, additive to the local one.
+  const webOrigins = (process.env.WEB_ORIGINS || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  await ensureClientOrigins(api, 'laundry-web', webOrigins);
+
   await verifyClaims(api, scopeByName);
 
   const discovery = await request(`/realms/${realmName}/.well-known/openid-configuration`);

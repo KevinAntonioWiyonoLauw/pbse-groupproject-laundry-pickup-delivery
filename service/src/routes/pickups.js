@@ -17,9 +17,17 @@ const {
   badRequest,
   notFound,
   unprocessable,
+  preconditionFailed,
+  validationExtras,
 } = require('../problem');
 const { requireScope } = require('../auth/require-scope');
 const { mayClaimOrder, mayCollectPickup } = require('../auth/ownership');
+const {
+  pickupVersion,
+  collectionVersion,
+  matchesWeak,
+  matchesStrong,
+} = require('../conditional');
 const {
   checkIdempotency,
   claimIdempotency,
@@ -59,7 +67,16 @@ router.get('/', requireScope('pickups:read'), (req, res) => {
     res.set('X-Next-Cursor', result.nextCursor);
   }
 
-  res.status(200).json(result.rows.map(toPickupRepresentation));
+  const items = result.rows.map(toPickupRepresentation);
+  const tag = collectionVersion(items);
+  res.set('ETag', tag);
+
+  // Polled collection: 304 with no body when nothing changed (P5 §A.7).
+  if (matchesWeak(req.headers['if-none-match'], tag)) {
+    return res.status(304).end();
+  }
+
+  res.status(200).json(items);
 });
 
 // Staff-only dispatch (scope `orders:fulfil`). The order named in the body is
@@ -78,14 +95,11 @@ router.post('/', requireScope('orders:fulfil'), (req, res) => {
 
   const validation = validateCreatePickup(req.body);
   if (validation) {
+    const extras = validationExtras(validation.errors);
     const problem =
       validation.status === 422
-        ? unprocessable(validation.errors.join('; '), req.originalUrl, {
-            invalidFields: validation.fields,
-          })
-        : badRequest(validation.errors.join('; '), req.originalUrl, {
-            invalidFields: validation.fields,
-          });
+        ? unprocessable(validation.errors.join('; '), req.originalUrl, extras)
+        : badRequest(validation.errors.join('; '), req.originalUrl, extras);
     return sendProblem(res, problem);
   }
 
@@ -144,6 +158,21 @@ router.post('/:pickupId/collect', requireScope('pickups:write'), (req, res) => {
 
   if (!mayCollectPickup(req.principal, pickup)) {
     return sendPickupNotFound(res);
+  }
+
+  // Conditional write. There is no GET for a single pickup in the contract, so
+  // a client cannot obtain this marker from the API — it can only carry one it
+  // observed elsewhere. The header is therefore accepted and honoured when
+  // present, and the transition stays naturally idempotent when it is absent.
+  const ifMatch = req.headers['if-match'];
+  if (ifMatch && !matchesStrong(ifMatch, pickupVersion(pickup))) {
+    return sendProblem(
+      res,
+      preconditionFailed(
+        'Pickup ini sudah berubah sejak terakhir dibaca. Muat ulang untuk melihat keadaan terbaru.',
+        req.originalUrl,
+      ),
+    );
   }
 
   if (pickup.status !== 'picked_up') {

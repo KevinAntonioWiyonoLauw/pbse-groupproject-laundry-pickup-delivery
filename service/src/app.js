@@ -7,6 +7,7 @@ const express = require('express');
 const ordersRouter = require('./routes/orders');
 const pickupsRouter = require('./routes/pickups');
 const { authenticate } = require('./auth/authenticate');
+const { cors } = require('./cors');
 const {
   sendProblem,
   badRequest,
@@ -18,6 +19,16 @@ const logger = require('./logger');
 const app = express();
 
 app.disable('x-powered-by');
+
+// Strong, not weak. If-Match requires strong comparison (RFC 9110 §13.1.1),
+// so a weak validator could never satisfy a precondition and every
+// concurrent write would slip through as if it had one.
+app.set('etag', 'strong');
+
+// CORS first: a preflight carries no Authorization header and can never be
+// authenticated, so it must be answered before `authenticate` runs.
+app.use(cors(config.CORS_ALLOWED_ORIGINS));
+
 app.use(express.json());
 
 // Public: the platform probes readiness without a token.

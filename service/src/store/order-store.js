@@ -40,8 +40,15 @@ function listForPrincipal(principal, { status, limit = 20, cursor } = {}) {
 
   // Layer 3 applied at the query boundary: a principal bound to an outlet sees
   // that outlet's orders, everyone else only their own domain identity.
+  //
+  // `outlet_id IS NULL` is part of the staff filter, not an oversight. An
+  // order that no outlet has taken in yet is exactly the intake queue staff
+  // are meant to work through; without it the queue is always empty and the
+  // only way to accept an order is to already know its identifier. This
+  // matches `mayStaffSeeOrder` in `auth/ownership.js` — the list and the
+  // detail must agree, or a visible row cannot be opened.
   if (principal?.outletId) {
-    conditions.push('outlet_id = ?');
+    conditions.push('(outlet_id = ? OR outlet_id IS NULL)');
     params.push(principal.outletId);
   } else {
     conditions.push('customer_id = ?');

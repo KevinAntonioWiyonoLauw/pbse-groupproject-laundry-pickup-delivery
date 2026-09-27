@@ -18,15 +18,35 @@ function isStaffOfOutlet(principal, outletId) {
 }
 
 /**
+ * Staff visibility of one order.
+ *
+ * Staff see two things: orders already bound to their own outlet, and orders
+ * not yet bound to any outlet at all — the intake queue they are expected to
+ * work through. An order bound to another outlet stays out of reach.
+ *
+ * This mirrors the collection filter in `order-store.listForPrincipal`
+ * exactly. The two must agree: a row that appears in the list has to be
+ * openable, and a detail that answers 200 has to be reachable from the list.
+ * When they disagreed, staff could claim an unbound order by identifier but
+ * received 404 when opening it from their own queue.
+ */
+function mayStaffSeeOrder(principal, order) {
+  if (!principal?.outletId) return false;
+  return order.outlet_id === null || order.outlet_id === principal.outletId;
+}
+
+/**
  * Staff intake rule. Staff may claim an order that is not yet bound to any
  * outlet (accepting an incoming order for their own outlet) and may keep
  * working on orders already bound to their outlet. Orders bound to another
  * outlet are out of reach.
+ *
+ * The visibility rule is `mayStaffSeeOrder`; the only thing claiming adds is
+ * the capability scope, which is what makes it a write.
  */
 function mayClaimOrder(principal, order) {
-  if (!principal?.outletId) return false;
-  if (!principal.scopes.includes('orders:fulfil')) return false;
-  return order.outlet_id === null || order.outlet_id === principal.outletId;
+  if (!principal?.scopes.includes('orders:fulfil')) return false;
+  return mayStaffSeeOrder(principal, order);
 }
 
 /**
@@ -39,7 +59,7 @@ function mayClaimOrder(principal, order) {
 function mayReadOrder(principal, order, assignment = null) {
   if (!principal) return false;
   if (principal.domainId === order.customer_id) return true;
-  if (isStaffOfOutlet(principal, order.outlet_id)) return true;
+  if (mayStaffSeeOrder(principal, order)) return true;
   if (
     assignment?.driverId &&
     principal.scopes.includes('pickups:write') &&
@@ -64,6 +84,7 @@ function mayCollectPickup(principal, pickup) {
 
 module.exports = {
   isStaffOfOutlet,
+  mayStaffSeeOrder,
   mayClaimOrder,
   mayReadOrder,
   mayCancelOrder,

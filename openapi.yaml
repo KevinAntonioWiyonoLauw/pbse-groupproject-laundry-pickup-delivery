@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Laundry Pickup & Delivery API
-  version: 1.2.0
+  version: 1.3.0
   license:
     name: Academic project
     url: https://opensource.org/licenses/MIT
@@ -11,8 +11,8 @@ info:
     enumeration values without crashing. OAuth 2.0 / OIDC authentication and
     scope-based authorization are required for all protected operations.
 servers:
-  - url: https://api.example.com/v1
-    description: Production API
+  - url: https://pbse.kevinio.my.id/v1
+    description: Deployed service
   - url: http://localhost:8080/v1
     description: Local service
 security:
@@ -53,15 +53,38 @@ paths:
       tags: [Orders]
       summary: List laundry orders
       operationId: listOrders
+      description: >-
+        Returns the orders the caller is allowed to see, and nothing else.
+
+        A customer sees only their own orders. Staff see orders already bound
+        to their own outlet **and** orders not yet bound to any outlet — the
+        intake queue they are expected to work through. An order bound to a
+        different outlet is not returned, and reading it by identifier answers
+        the same `404` as an order that does not exist.
       security:
         - oauth2: [orders:read]
       parameters:
         - $ref: '#/components/parameters/OrderStatusFilter'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Order collection
+          headers:
+            ETag:
+              description: >-
+                Version marker for this page. Send it back as `If-None-Match`
+                on the next poll to receive `304` when nothing changed.
+              schema:
+                type: string
+            X-Next-Cursor:
+              description: >-
+                Opaque cursor for the next page. Present only when more rows
+                exist. Pass it back in the `cursor` query parameter.
+              schema:
+                type: string
+                example: eyJjIjoiMjAyNi0wOS0wMlQxMDowMDowMC4wMDBaIiwiaSI6Im9yZF8wMUhaWDJZNUs3In0
           content:
             application/json:
               schema:
@@ -77,6 +100,8 @@ paths:
                   status: pending_pickup
                   createdAt: '2026-09-02T10:00:00Z'
                   updatedAt: '2026-09-02T10:00:00Z'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -167,6 +192,17 @@ paths:
       responses:
         '200':
           description: Laundry order
+          headers:
+            ETag:
+              description: >-
+                Opaque version marker for this order. Send it back as
+                `If-None-Match` to poll cheaply, and as `If-Match` on a write
+                that must not overwrite somebody else's change. Strong
+                validator: it never carries the `W/` prefix, because
+                `If-Match` requires strong comparison.
+              schema:
+                type: string
+                example: '"3f9c1a7b8e2d4f60a1b2c3d4e5f60718"'
           content:
             application/json:
               schema:
@@ -180,6 +216,8 @@ paths:
                 status: pending_pickup
                 createdAt: '2026-09-02T10:00:00Z'
                 updatedAt: '2026-09-02T10:00:00Z'
+        '304':
+          $ref: '#/components/responses/NotModified'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -215,6 +253,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/OrderId'
         - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
       responses:
         '200':
           description: Cancellation accepted
@@ -238,6 +277,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
         '422':
           $ref: '#/components/responses/UnprocessableContent'
         '500':
@@ -269,6 +310,7 @@ paths:
         - oauth2: [orders:fulfil]
       parameters:
         - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/IfMatch'
       responses:
         '200':
           description: Order claimed into the caller's outlet
@@ -294,6 +336,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
         '500':
           $ref: '#/components/responses/InternalServerError'
         '502':
@@ -308,15 +352,34 @@ paths:
       tags: [Pickups]
       summary: List pickup arrangements
       operationId: listPickups
+      description: >-
+        Returns the pickups the caller is allowed to see. A driver sees only
+        their own assignments; staff see the pickups of orders belonging to
+        their outlet.
       security:
         - oauth2: [pickups:read]
       parameters:
         - $ref: '#/components/parameters/PickupStatusFilter'
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/IfNoneMatch'
       responses:
         '200':
           description: Pickup collection
+          headers:
+            ETag:
+              description: >-
+                Version marker for this page. Send it back as `If-None-Match`
+                on the next poll to receive `304` when nothing changed.
+              schema:
+                type: string
+            X-Next-Cursor:
+              description: >-
+                Opaque cursor for the next page. Present only when more rows
+                exist. Pass it back in the `cursor` query parameter.
+              schema:
+                type: string
+                example: eyJjIjoiMjAyNi0wOS0wM1QwOTowMDowMC4wMDBaIiwiaSI6InBrdV8wMUhaWDJaOEs5In0
           content:
             application/json:
               schema:
@@ -330,6 +393,8 @@ paths:
                   scheduledAt: '2026-09-03T09:00:00Z'
                   address: Jl. Merdeka No. 10, Jakarta
                   status: scheduled
+        '304':
+          $ref: '#/components/responses/NotModified'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -428,6 +493,7 @@ paths:
         - oauth2: [pickups:write]
       parameters:
         - $ref: '#/components/parameters/PickupId'
+        - $ref: '#/components/parameters/IfMatch'
       responses:
         '200':
           description: Pickup collected, or already collected
@@ -452,6 +518,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
         '500':
           $ref: '#/components/responses/InternalServerError'
         '502':
@@ -553,6 +621,33 @@ components:
         format: uuid
         pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$'
         example: 423e4567-e89b-42d3-a456-426614174000
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: >-
+        Version marker of the entity as the client last saw it, taken from the
+        `ETag` of a preceding read. When it is present and does not match the
+        current version, the service answers `412` instead of applying the
+        write, so a client cannot overwrite a change it has not seen.
+
+        Optional, and deliberately so: a client that omits it keeps the
+        pre-1.3.0 behaviour. A client that wants the lost-update guarantee must
+        send it. Strong comparison applies, so a weak tag never matches.
+      schema:
+        type: string
+        example: '"3f9c1a7b8e2d4f60a1b2c3d4e5f60718"'
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: >-
+        Version marker from a previous read of the same resource. When it
+        matches the current version the service answers `304` with no body,
+        which is what makes a poll cheap.
+      schema:
+        type: string
+        example: '"3f9c1a7b8e2d4f60a1b2c3d4e5f60718"'
 
   schemas:
     Order:
@@ -720,8 +815,60 @@ components:
           items:
             type: string
           example: [serviceType, weightKg]
+        invalid-params:
+          type: array
+          description: >-
+            Machine-readable list of the request fields that failed validation,
+            each with the reason it failed. Extension member in the shape
+            RFC 9457 uses in its own example. Sent alongside `invalidFields`,
+            which is retained for clients written against earlier versions.
+          items:
+            type: object
+            required: [name, reason]
+            properties:
+              name:
+                type: string
+                example: weightKg
+              reason:
+                type: string
+                example: must be at least 0.1
+        error:
+          type: string
+          description: >-
+            OAuth 2.0 error code, present on `401` responses and mirrored in
+            the `WWW-Authenticate` header.
+          example: invalid_token
+        requiredScopes:
+          type: array
+          description: Scopes the operation required, present on `403` responses.
+          items:
+            type: string
+          example: [orders:fulfil]
 
   responses:
+    NotModified:
+      description: >-
+        The resource is unchanged since the version named in `If-None-Match`.
+        The body is empty by definition; a client treats this as a successful
+        read and clears any stale marker.
+    PreconditionFailed:
+      description: >-
+        The entity changed since the version named in `If-Match`. A normal
+        condition, not a system failure: the client is expected to reload,
+        re-render, and explain it in domain terms rather than show a generic
+        error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: https://api.example.com/problems/precondition-failed
+            title: Precondition failed
+            status: 412
+            detail: >-
+              Order ini sudah ditangani oleh rekan kerja. Muat ulang untuk
+              melihat keadaan terbaru.
+            instance: /v1/orders/ord_01HZX2Y5K7/fulfilment
     BadRequest:
       description: Malformed or invalid request
       content:

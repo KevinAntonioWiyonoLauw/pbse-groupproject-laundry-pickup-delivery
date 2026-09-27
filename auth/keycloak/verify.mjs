@@ -33,11 +33,21 @@ async function main() {
   check(realm.revokeRefreshToken && realm.refreshTokenMaxReuse === 0, 'Rotation enabled; maximum reuse is zero');
   check(realm.accessTokenLifespan === 300, 'Access-token lifespan is 300 seconds');
   const allClients = await getAdmin('/clients');
+  // Callbacks that must always be registered. Deployment adds more (the
+  // deployed web origin), so this checks membership and exactness rather than
+  // a count: an assertion on `length === 1` would fail the moment a second
+  // environment is registered, which is a legitimate change.
+  const REQUIRED_CALLBACKS = {
+    'laundry-web': ['http://localhost:5173/callback'],
+    'laundry-mobile': ['id.ac.ugm.laundry://oauth/callback'],
+  };
   for (const id of ['laundry-web', 'laundry-mobile']) {
     const c = allClients.find(c => c.clientId === id);
     check(c?.publicClient && c.standardFlowEnabled && !c.directAccessGrantsEnabled &&
       !c.implicitFlowEnabled && !c.serviceAccountsEnabled && c.attributes['pkce.code.challenge.method'] === 'S256', `${id}: public, S256, no password/implicit/service-account grant`);
-    check(c.redirectUris.length === 1 && !c.redirectUris[0].includes('*'), `${id}: one exact callback`);
+    const uris = c?.redirectUris ?? [];
+    check(uris.every(u => !u.includes('*')), `${id}: no wildcard callback`);
+    check(REQUIRED_CALLBACKS[id].every(u => uris.includes(u)), `${id}: required callbacks registered`);
   }
   const users = await getAdmin('/users?max=100');
   for (const name of Object.keys(credentials.users)) {

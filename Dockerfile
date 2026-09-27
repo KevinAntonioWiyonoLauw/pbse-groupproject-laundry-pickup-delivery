@@ -21,6 +21,9 @@ USER node
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV DATABASE_FILE=./db/laundry.sqlite
+# Origin of the browser client, set at deploy time. Defaults to empty: no
+# browser origin is allowed until one is named explicitly.
+ENV CORS_ALLOWED_ORIGINS=
 
 EXPOSE 8080
 

@@ -120,15 +120,93 @@ laundry-pickup-delivery/
 │   ├── business-rules.md       # Dekomposisi aturan bisnis
 │   └── decisions/
 │       └── 0001-domain.md      # ADR pemilihan domain
-├── service/                   # Backend (P3)
+├── auth/keycloak/             # Authorization server (P4)
+├── service/                   # Backend (P3, auth P4, CORS & conditional request P5)
 ├── clients/
 │   ├── web/                    # Dashboard admin (P5)
 │   ├── mobile/                 # App customer & driver (P6)
 │   ├── device/                 # Scanner loket (P11)
 │   └── mcp/                    # Assistant agent (P12)
 └── tests/
-    └── contract/                # Pengujian kesesuaian service vs openapi.yaml
+    ├── contract/                # Pengujian kesesuaian service vs openapi.yaml
+    ├── authz/                   # Empat negative test otorisasi (P4)
+    └── web/                     # CORS, visibilitas staff, conditional request (P5)
 ```
+
+---
+
+## 🌐 Perilaku Service untuk Client Browser (P5)
+
+Tiga hal yang dibutuhkan browser client dan tidak ada sebelum P5:
+
+| Kebutuhan | Perilaku |
+|---|---|
+| **CORS** | Origin diizinkan dibaca dari `CORS_ALLOWED_ORIGINS` (daftar eksplisit, dipisah koma). Origin yang tidak terdaftar tidak pernah di-reflect. `Vary: Origin` selalu dikirim. Preflight `OPTIONS` dijawab `204` sebelum authentication, karena preflight tidak membawa `Authorization`. |
+| **Conditional read** | `GET` pada entitas dan koleksi mengembalikan `ETag` strong. Kirim kembali sebagai `If-None-Match`; bila tidak ada perubahan jawabannya `304` tanpa body. |
+| **Conditional write** | Kirim `If-Match` berisi ETag yang terakhir dilihat. Bila entitas sudah berubah, jawabannya `412` dengan problem type `precondition-failed` — bukan `200` yang menimpa perubahan orang lain. |
+
+`If-Match` bersifat opsional dan tetap dihormati bila dikirim, sehingga client
+yang ditulis terhadap kontrak `1.2.0` tidak perlu berubah.
+
+`ETag` dan `X-Next-Cursor` adalah custom header, jadi keduanya harus ada di
+`Access-Control-Expose-Headers` agar dapat dibaca browser. `If-Match` dan
+`If-None-Match` juga harus ada di `Access-Control-Allow-Headers` karena
+keduanya memicu preflight.
+
+### Visibilitas koleksi
+
+| Principal | `GET /v1/orders` mengembalikan |
+|---|---|
+| Customer | Hanya order dengan `customerId` miliknya |
+| Staff | Order yang terikat outletnya **dan** order yang belum terikat outlet mana pun (antrean masuk) |
+
+Order yang terikat outlet lain tidak dikembalikan, dan membaca order itu
+langsung lewat identifier menghasilkan `404` yang identik dengan order yang
+tidak ada.
+
+---
+
+## 🔑 Menjalankan Authorization Server (P4)
+
+Prasyarat: Docker Desktop aktif dan Node.js >= 20.
+
+```bash
+node auth/keycloak/prepare.mjs
+docker compose --env-file auth/keycloak/.runtime/.env -f docker-compose.auth.yml up -d
+node auth/keycloak/verify.mjs
+```
+
+`prepare.mjs` membuat password admin dan password enam user uji secara acak,
+lalu menyimpannya **hanya** di `auth/keycloak/.runtime/credentials.json`
+(gitignored, permission `0600`). Tidak ada credential pada public client atau
+output perintah. Jangan tempel isinya ke chat, commit, screenshot, atau log.
+
+### Memperbaiki realm yang sudah ada
+
+`import.mjs` bersifat idempotent: ia membuat client scope yang hilang,
+merekonsiliasi protocol mapper, **mendeklarasikan attribute identitas pada user
+profile**, memastikan atribut user, dan **membaca ulang untuk memverifikasi**
+atribut itu benar-benar tersimpan.
+
+```bash
+node auth/keycloak/import.mjs http://localhost:8081
+node auth/keycloak/import.mjs https://<keycloak-host> \
+  # origin web app yang di-deploy, additive terhadap origin lokal:
+  WEB_ORIGINS=https://<web-app-host>
+```
+
+Admin credential diambil dari environment (`KC_ADMIN_PASSWORD`) bila ada, jika
+tidak dari `.runtime/credentials.json`.
+
+> **Kenapa langkah deklarasi attribute penting.** Keycloak 24+ memvalidasi user
+> terhadap *declarative user profile*. Attribute yang tidak dideklarasikan di
+> sana **dibuang tanpa error**: admin API menjawab `204 No Content` dan nilainya
+> tidak pernah muncul pada user. Akibatnya `principal.js` jatuh ke fallback
+> `sub`, setiap perbandingan kepemilikan menjadi UUID Keycloak melawan
+> identifier domain, dan **setiap object dijawab `404`**. Gejalanya mudah
+> disalahartikan sebagai bug client. Karena itu `import.mjs` sekarang
+> mendeklarasikan attribute lebih dulu, lalu memverifikasi dengan membaca ulang
+> — bukan sekadar mengirim `PUT` dan menganggapnya berhasil.
 
 ---
 
@@ -162,15 +240,107 @@ npx @redocly/cli lint openapi.yaml
 
 ---
 
-## 🚀 Live Deployment Service (P3)
+## 🚀 Live Deployment
 
 Backend service aktif dan dapat diakses publik:
+
 - **Base URL:** `https://pbse.kevinio.my.id`
 - **Health Check:** `https://pbse.kevinio.my.id/health`
 - **Base API Path:** `https://pbse.kevinio.my.id/v1`
+- **Authorization Server:** `https://keycloak-production-68f0.up.railway.app/realms/laundry`
+- **Audience:** `laundry-api`
+
+Endpoint protected menjawab `401` tanpa token. Verifikasi menyeluruh, termasuk
+penerimaan token asli, dijalankan dengan:
+
+```bash
+node auth/keycloak/verify-deployment.mjs \
+  https://pbse.kevinio.my.id \
+  https://keycloak-production-68f0.up.railway.app
+```
+
+Dokumentasi terkait:
+
 - **Bukti Uji & Hasil Curl (Service Owner):** [`service/EVIDENCE.md`](service/EVIDENCE.md)
 - **Laporan Integrasi (Integration Owner):** [`docs/p3-integration-report.md`](docs/p3-integration-report.md)
 - **Review Klien (Client Owner):** [`docs/p3-client-review.md`](docs/p3-client-review.md)
+- **Authorization server & handoff:** [`docs/p4-authorization-server.md`](docs/p4-authorization-server.md) · [`docs/p4-contract-handoff.md`](docs/p4-contract-handoff.md)
+
+---
+
+## 🧭 Aplikasi Web (P5)
+
+### Tabel workflow
+
+Setiap workflow adalah sesuatu yang **diselesaikan seseorang**, bukan daftar
+layar. Setiap baris menyebut operasi yang benar-benar ada di `openapi.yaml`.
+
+| Workflow | Screen | Role permitted | Operation in `openapi.yaml` | Call/screen |
+|---|---|---|---|---|
+| **W1 — Staff menerima order masuk** | Daftar order masuk `/orders?status=pending_pickup` | staff | `GET /v1/orders?status=pending_pickup` | 1 |
+| | Detail order `/orders/{orderId}` | staff | `GET /v1/orders/{orderId}` | 1 |
+| | Aksi Terima | staff | `POST /v1/orders/{orderId}/fulfilment` | 1 |
+| **W2 — Staff menugaskan driver** | Panel penugasan `/orders/{orderId}/assign` | staff | `GET /v1/orders/{orderId}` + `POST /v1/pickups` | 2 |
+| **W3 — Staff memantau pickup** | Daftar pickup `/pickups` (polled) | staff | `GET /v1/pickups` | 1 |
+| **W4 — Customer membuat order** | Form order baru `/orders/new` | customer | `POST /v1/orders` | 1 |
+| | Order saya `/orders` | customer | `GET /v1/orders` | 1 |
+| **W5 — Customer membatalkan order** | Detail order `/orders/{orderId}` | customer | `GET /v1/orders/{orderId}` | 1 |
+| | Konfirmasi pembatalan | customer | `POST /v1/orders/{orderId}/cancellation` | 1 |
+
+### Alamat aplikasi ter-deploy
+
+_Belum di-deploy._ Bagian ini diisi setelah aplikasi web tersedia di Vercel.
+
+### Akun uji untuk presentasi
+
+| Username | Role | Domain identity | Data yang dipegang |
+|---|---|---|---|
+| `staff-outlet-a` | staff | `outlet_a` | Order yang terikat `outlet_a` |
+| `student-a` | customer | `cus_studentA` | Order miliknya sendiri |
+
+Password akun uji tidak ditulis di repository. Nilainya ada pada
+`auth/keycloak/.runtime/credentials.json` untuk provider lokal, dan pada
+provider hosted setelah direset melalui `import.mjs` atau admin console.
+
+### Catatan penyimpanan session
+
+**Keputusan: token disimpan di `localStorage`.**
+
+Alternatif yang lebih aman secara teori adalah menyimpan token hanya di memori
+JavaScript, dan itu memang yang diusulkan pada ADR 0003. Keputusan itu tidak
+dapat dipertahankan begitu uji terima P5 dijalankan: membuka URL sebuah layar
+di **tab baru** menciptakan konteks JavaScript yang baru, sehingga token di
+memori hilang dan aplikasi mengalihkan pengguna ke sign-in — padahal syaratnya
+adalah layar yang sama dengan data yang sama. `sessionStorage` juga tidak
+menolong karena bersifat per-tab, dan memperbarui token diam-diam lewat iframe
+tidak dapat diandalkan karena authorization server berada pada **situs
+berbeda** sehingga cookie-nya diblokir browser modern.
+
+**Konsekuensi keamanan yang diterima:** token di `localStorage` dapat dibaca
+oleh **setiap** script yang berjalan pada halaman itu, sehingga satu celah XSS
+cukup untuk mencuri sesi. Cookie `HttpOnly` akan menutup celah itu, tetapi
+memerlukan backend-for-frontend yang sudah ditolak pada ADR 0003. Karena
+access token berumur 300 detik, jendela penyalahgunaan dibatasi oleh masa
+berlakunya; refresh token tetap menjadi target utama dan karena itu refresh
+dikoordinasikan antar-tab agar reuse tidak mencabut seluruh token family.
+
+### Temuan terhadap kontrak
+
+Layar yang tidak dapat dibangun dari operasi yang dipublikasikan adalah temuan
+tentang kontrak, bukan alasan menambah endpoint (aturan P5 §0.1). Berikut yang
+tercatat:
+
+| # | Temuan | Dampak pada client |
+|---|---|---|
+| 1 | Tidak ada operasi daftar driver, padahal `CreatePickupRequest.driverId` wajib | Form penugasan driver (W2) memerlukan `driverId` yang tidak dapat ditemukan lewat API |
+| 2 | Tidak ada `GET /v1/pickups/{pickupId}` | `ETag` per-pickup tidak dapat diperoleh, sehingga conditional write pada `collectPickup` tidak dapat dibangun dari operasi yang ada |
+| 3 | State machine tidak lengkap: service hanya pernah menulis `pending_pickup`, `processing`, `cancelled` (order) dan `assigned`, `picked_up` (pickup) | Status `ready_for_pickup`, `confirmed`, `assigned`, `completed`, dan `delivered` ada di enum tetapi tidak pernah dicapai |
+| 4 | `400` vs `422` tidak sepenuhnya mengikuti pembacaan RFC 9457: kegagalan nilai field (mis. `weightKg` di bawah minimum) dijawab `422` | Client menangani keduanya; `invalid-params` menempelkan pesan pada field yang tepat |
+| 5 | Tidak ada operasi sign-out di kontrak | Client memanggil `end_session_endpoint` dan `revocation_endpoint` provider |
+| 6 | `CreateOrderRequest.customerId` meminta identitas yang sudah ada pada token | Client membaca `fixture_domain_id` dari token |
+
+Temuan 1 dan 2 belum diselesaikan dan **tidak** ditambal dengan endpoint baru,
+sesuai aturan tugas.
 
 ---
 

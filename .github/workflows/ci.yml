@@ -76,6 +76,13 @@ jobs:
           pnpm --dir service run test:persistence
           pnpm --dir service run test:concurrency
 
+      # CORS, staff visibility, and conditional requests (304 / 412). These are
+      # the behaviours the browser client depends on and that the P3/P4 suites
+      # never exercised.
+      - name: Run web behaviour tests
+        run: |
+          pnpm --dir service run test:web
+
       - name: Run Redocly OpenAPI Lint
         run: |
           pnpm --package=@redocly/cli dlx redocly lint openapi.yaml

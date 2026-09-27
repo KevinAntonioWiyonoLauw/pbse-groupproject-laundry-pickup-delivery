@@ -1,5 +1,49 @@
 # Contract changelog
 
+## 2026-09-27 (v1.3.0)
+
+Perubahan ini **kompatibel** menurut `docs/compatibility.md`: seluruhnya
+menambah header, response, dan extension member opsional. Tidak ada operasi,
+field, atau status code yang dihapus atau diubah maknanya, sehingga client
+yang ditulis terhadap `1.2.0` tetap berjalan tanpa perubahan.
+
+Alasan: Session 5 membangun browser client di atas kontrak ini, dan lima
+kebutuhan client tidak dapat dinyatakan dari kontrak `1.2.0`.
+
+### Added (compatible)
+
+- Header `ETag` pada `GET /orders/{orderId}`, `GET /orders`, dan `GET /pickups`.
+  Strong validator, tanpa prefix `W/`, karena `If-Match` mensyaratkan strong
+  comparison.
+- Response `304 Not Modified` pada tiga operasi di atas, beserta parameter
+  `If-None-Match`. Ini yang membuat polling murah.
+- Parameter `If-Match` pada `POST /orders/{orderId}/fulfilment`,
+  `POST /orders/{orderId}/cancellation`, dan `POST /pickups/{pickupId}/collect`,
+  beserta response `412` dan problem type
+  `https://api.example.com/problems/precondition-failed`. Ini yang mencegah
+  lost update ketika dua window menulis entitas yang sama.
+- Header `X-Next-Cursor` pada `GET /orders` dan `GET /pickups`. Header ini
+  sudah dipancarkan service sejak P3 tetapi belum pernah dinyatakan di kontrak.
+- Extension member `invalid-params` (`[{name, reason}]`) pada response `400`,
+  dalam bentuk yang dipakai RFC 9457 pada contohnya.
+- Extension member `error` pada `401` dan `requiredScopes` pada `403`. Keduanya
+  sudah dipancarkan service sejak P4 tetapi belum dinyatakan di kontrak.
+
+### Clarified
+
+- `GET /orders` kini menyatakan aturan visibilitas secara eksplisit: customer
+  melihat order miliknya sendiri; staff melihat order yang sudah terikat
+  outletnya **dan** order yang belum terikat outlet mana pun (antrean masuk);
+  order yang terikat outlet lain tidak dikembalikan.
+- `servers` diarahkan ke deployment sebenarnya
+  (`https://pbse.kevinio.my.id/v1`) menggantikan `api.example.com`.
+
+### Catatan untuk implementasi
+
+`If-Match` bersifat opsional dan tetap dihormati bila dikirim. Client yang
+tidak mengirimnya mempertahankan perilaku `1.2.0`; client yang mengirimnya
+mendapat jaminan tidak menimpa perubahan yang belum dilihatnya.
+
 ## 2026-09-23 (v1.2.0)
 
 Perubahan ini **kompatibel** menurut `docs/compatibility.md` (menambah endpoint).

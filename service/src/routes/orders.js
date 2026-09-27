@@ -20,6 +20,8 @@ const {
   notFound,
   orderNotCancellable,
   unprocessable,
+  preconditionFailed,
+  validationExtras,
 } = require('../problem');
 const { requireScope } = require('../auth/require-scope');
 const {
@@ -28,6 +30,12 @@ const {
   mayCreateOrder,
   mayClaimOrder,
 } = require('../auth/ownership');
+const {
+  orderVersion,
+  collectionVersion,
+  matchesWeak,
+  matchesStrong,
+} = require('../conditional');
 const {
   checkIdempotency,
   claimIdempotency,
@@ -59,6 +67,18 @@ router.get('/:orderId', requireScope('orders:read'), (req, res) => {
     return sendOrderNotFound(res);
   }
 
+  const tag = orderVersion(row);
+  res.set('ETag', tag);
+
+  // Evaluated explicitly rather than left to Express's `req.fresh`.
+  // `fetch()` injects `Cache-Control: no-cache` whenever it sends
+  // `If-None-Match`, and `fresh` reports a `no-cache` request as stale by
+  // design, so relying on it means the 304 never fires from a browser or from
+  // any test written with `fetch`. See docs/decisions for the measurement.
+  if (matchesWeak(req.headers['if-none-match'], tag)) {
+    return res.status(304).end();
+  }
+
   res.status(200).json(toOrderRepresentation(row));
 });
 
@@ -85,7 +105,17 @@ router.get('/', requireScope('orders:read'), (req, res) => {
     res.set('X-Next-Cursor', result.nextCursor);
   }
 
-  res.status(200).json(result.rows.map(toOrderRepresentation));
+  const items = result.rows.map(toOrderRepresentation);
+  const tag = collectionVersion(items);
+  res.set('ETag', tag);
+
+  // A polled collection: when nothing changed the caller gets 304 with no
+  // body, which is the point of conditional reads (P5 §A.7).
+  if (matchesWeak(req.headers['if-none-match'], tag)) {
+    return res.status(304).end();
+  }
+
+  res.status(200).json(items);
 });
 
 router.post('/', requireScope('orders:write'), (req, res) => {
@@ -102,14 +132,11 @@ router.post('/', requireScope('orders:write'), (req, res) => {
 
   const validation = validateCreateOrder(req.body);
   if (validation) {
+    const extras = validationExtras(validation.errors);
     const problem =
       validation.status === 422
-        ? unprocessable(validation.errors.join('; '), req.originalUrl, {
-            invalidFields: validation.fields,
-          })
-        : badRequest(validation.errors.join('; '), req.originalUrl, {
-            invalidFields: validation.fields,
-          });
+        ? unprocessable(validation.errors.join('; '), req.originalUrl, extras)
+        : badRequest(validation.errors.join('; '), req.originalUrl, extras);
     return sendProblem(res, problem);
   }
 
@@ -174,6 +201,25 @@ router.post('/:orderId/cancellation', requireScope('orders:write'), (req, res) =
     return sendProblem(res, notFound('/v1/orders/{orderId}/cancellation'));
   }
 
+  // Precondition before the state check, as RFC 9110 evaluates it before the
+  // method is performed: "the thing you read is no longer what is there" is
+  // more precise than "this order is in the wrong state", and it is the
+  // condition the client can actually act on.
+  //
+  // Optional but honoured. Existing clients that never send If-Match keep
+  // working unchanged; a client that does send it can no longer overwrite a
+  // change it has not seen (P5 §A.8.1).
+  const ifMatch = req.headers['if-match'];
+  if (ifMatch && !matchesStrong(ifMatch, orderVersion(order))) {
+    return sendProblem(
+      res,
+      preconditionFailed(
+        'Order ini sudah berubah sejak terakhir dibaca. Muat ulang untuk melihat keadaan terbaru.',
+        req.originalUrl,
+      ),
+    );
+  }
+
   if (!CANCELLABLE.includes(order.status)) {
     return sendProblem(
       res,
@@ -227,6 +273,23 @@ router.post('/:orderId/fulfilment', requireScope('orders:fulfil'), (req, res) =>
   // Ownership is decided before any mutation is attempted.
   if (!mayClaimOrder(req.principal, order)) {
     return sendOrderNotFound(res);
+  }
+
+  // Conditional write: without a precondition the server has no basis for
+  // refusing a write that overwrites somebody else's change, and two windows
+  // pressing Accept both succeed with the second silently winning — the lost
+  // update (P5 §A.8.1). Optional, so clients that do not send it are
+  // unaffected; naturally idempotent, so a repeated claim by the same outlet
+  // is still accepted rather than turned into a 412.
+  const ifMatch = req.headers['if-match'];
+  if (ifMatch && !matchesStrong(ifMatch, orderVersion(order))) {
+    return sendProblem(
+      res,
+      preconditionFailed(
+        'Order ini sudah ditangani oleh rekan kerja. Muat ulang untuk melihat keadaan terbaru.',
+        req.originalUrl,
+      ),
+    );
   }
 
   const now = new Date().toISOString();

@@ -66,6 +66,22 @@ function unprocessable(detail, instance, extras) {
   );
 }
 
+/**
+ * The entity changed between the read that produced the caller's version
+ * marker and this write. A normal condition, not a system failure: the client
+ * is expected to refresh, re-render, and explain it in domain terms rather
+ * than show a generic error banner (P5 §A.8.2).
+ */
+function preconditionFailed(detail, instance) {
+  return createProblem(
+    'https://api.example.com/problems/precondition-failed',
+    'Precondition failed',
+    412,
+    detail,
+    instance,
+  );
+}
+
 function internalError(instance) {
   return createProblem(
     'https://api.example.com/problems/internal-error',
@@ -98,14 +114,42 @@ function forbidden(instance, scopes) {
   );
 }
 
+/**
+ * Turn the human-readable validation messages into the machine-readable
+ * `invalid-params` member, so a client can put each reason on its own field
+ * instead of parsing one joined sentence (P5 §A.6.1).
+ *
+ * Each message is written as "<field> <reason>", which is also how
+ * `invalidFields` derives the names. Splitting on the first space keeps both
+ * members derived from one source, so they cannot drift apart.
+ */
+function invalidParamsFrom(errors) {
+  return errors.map((message) => {
+    const cut = message.indexOf(' ');
+    return cut === -1
+      ? { name: message, reason: '' }
+      : { name: message.slice(0, cut), reason: message.slice(cut + 1) };
+  });
+}
+
+function validationExtras(errors) {
+  return {
+    invalidFields: errors.map((message) => message.split(' ')[0]),
+    'invalid-params': invalidParamsFrom(errors),
+  };
+}
+
 module.exports = {
   createProblem,
   sendProblem,
+  invalidParamsFrom,
+  validationExtras,
   badRequest,
   notFound,
   idempotencyConflict,
   orderNotCancellable,
   unprocessable,
+  preconditionFailed,
   internalError,
   unauthorized,
   forbidden,
