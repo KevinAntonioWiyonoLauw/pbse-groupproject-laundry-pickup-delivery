@@ -25,8 +25,8 @@ const { mayClaimOrder, mayCollectPickup } = require('../auth/ownership');
 const {
   pickupVersion,
   collectionVersion,
-  matchesWeak,
-  matchesStrong,
+  matchesIfNoneMatch,
+  matchesIfMatch,
 } = require('../conditional');
 const {
   checkIdempotency,
@@ -71,8 +71,8 @@ router.get('/', requireScope('pickups:read'), (req, res) => {
   const tag = collectionVersion(items);
   res.set('ETag', tag);
 
-  // Polled collection: 304 with no body when nothing changed (P5 §A.7).
-  if (matchesWeak(req.headers['if-none-match'], tag)) {
+  // Polled collection: 304 with no body when nothing changed (P5 Â§A.7).
+  if (matchesIfNoneMatch(req.headers['if-none-match'], tag)) {
     return res.status(304).end();
   }
 
@@ -161,11 +161,11 @@ router.post('/:pickupId/collect', requireScope('pickups:write'), (req, res) => {
   }
 
   // Conditional write. There is no GET for a single pickup in the contract, so
-  // a client cannot obtain this marker from the API — it can only carry one it
+  // a client cannot obtain this marker from the API â€” it can only carry one it
   // observed elsewhere. The header is therefore accepted and honoured when
   // present, and the transition stays naturally idempotent when it is absent.
   const ifMatch = req.headers['if-match'];
-  if (ifMatch && !matchesStrong(ifMatch, pickupVersion(pickup))) {
+  if (ifMatch && !matchesIfMatch(ifMatch, pickupVersion(pickup))) {
     return sendProblem(
       res,
       preconditionFailed(

@@ -83,6 +83,13 @@ jobs:
         run: |
           pnpm --dir service run test:web
 
+      # A proxy that re-encodes a response weakens its validator to `W/"..."`,
+      # and a browser sends that weak form back in `If-Match`. Without this
+      # suite, that regression only appears in production.
+      - name: Run weak-validator regression test
+        run: |
+          pnpm --dir service run test:weak-etag
+
       - name: Run Redocly OpenAPI Lint
         run: |
           pnpm --package=@redocly/cli dlx redocly lint openapi.yaml

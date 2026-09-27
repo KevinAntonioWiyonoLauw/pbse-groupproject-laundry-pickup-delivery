@@ -55,21 +55,47 @@ function parseTags(header) {
 const stripWeak = (tag) => tag.replace(/^W\//, '');
 
 /**
- * If-None-Match uses weak comparison (RFC 9110 §13.1.2): a proxy that
- * downgraded the tag to weak must not turn a valid 304 into a full response.
+ * If-None-Match comparison (RFC 9110 §13.1.2, weak). A proxy that downgraded
+ * the tag must not turn a valid `304` into a full response.
  */
-function matchesWeak(header, tag) {
+function matchesIfNoneMatch(header, tag) {
   const tags = parseTags(header).map(stripWeak);
   return tags.includes('*') || tags.includes(stripWeak(tag));
 }
 
 /**
- * If-Match uses strong comparison (RFC 9110 §13.1.1): a weak tag never
- * matches. This is why `entityVersion` must not emit one.
+ * If-Match comparison.
+ *
+ * RFC 9110 §13.1.1 specifies *strong* comparison, which a weak tag never
+ * satisfies. This function compares the opaque value instead, and the reason
+ * is measured rather than theoretical.
+ *
+ * The service sits behind Cloudflare. Cloudflare re-encodes JSON responses
+ * with Brotli, and when it transforms a representation it weakens the
+ * validator to say so — which is correct behaviour for an intermediary.
+ * Measured against the deployment:
+ *
+ *   Accept-Encoding: (default)  ->  W/"aiNfDU1j..."   content-encoding: br
+ *   Accept-Encoding: identity   ->  "aiNfDU1j..."     no compression
+ *
+ * A browser therefore always holds the weak form and sends it back in
+ * `If-Match`. Under strict strong comparison it would never match, so a
+ * correct client could never perform a single write: every request would be
+ * answered `412`, including the first one.
+ *
+ * The deviation is safe here because the tag is an *entity version marker*,
+ * not a byte-level checksum. `W/"abc"` and `"abc"` name the same version,
+ * which is exactly the question `If-Match` asks. Strong comparison exists to
+ * protect byte-exact operations such as range requests, and this API offers
+ * none.
+ *
+ * `Cache-Control: no-transform` is also set on responses, to stop the
+ * weakening at its source. This comparison is the fallback for any
+ * intermediary that ignores that directive.
  */
-function matchesStrong(header, tag) {
-  const tags = parseTags(header);
-  return tags.includes('*') || tags.includes(tag);
+function matchesIfMatch(header, tag) {
+  const tags = parseTags(header).map(stripWeak);
+  return tags.includes('*') || tags.includes(stripWeak(tag));
 }
 
 module.exports = {
@@ -78,6 +104,6 @@ module.exports = {
   pickupVersion,
   collectionVersion,
   parseTags,
-  matchesWeak,
-  matchesStrong,
+  matchesIfNoneMatch,
+  matchesIfMatch,
 };

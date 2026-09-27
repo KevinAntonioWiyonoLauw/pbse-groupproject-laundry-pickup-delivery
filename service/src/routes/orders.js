@@ -33,8 +33,8 @@ const {
 const {
   orderVersion,
   collectionVersion,
-  matchesWeak,
-  matchesStrong,
+  matchesIfNoneMatch,
+  matchesIfMatch,
 } = require('../conditional');
 const {
   checkIdempotency,
@@ -75,7 +75,7 @@ router.get('/:orderId', requireScope('orders:read'), (req, res) => {
   // `If-None-Match`, and `fresh` reports a `no-cache` request as stale by
   // design, so relying on it means the 304 never fires from a browser or from
   // any test written with `fetch`. See docs/decisions for the measurement.
-  if (matchesWeak(req.headers['if-none-match'], tag)) {
+  if (matchesIfNoneMatch(req.headers['if-none-match'], tag)) {
     return res.status(304).end();
   }
 
@@ -110,8 +110,8 @@ router.get('/', requireScope('orders:read'), (req, res) => {
   res.set('ETag', tag);
 
   // A polled collection: when nothing changed the caller gets 304 with no
-  // body, which is the point of conditional reads (P5 §A.7).
-  if (matchesWeak(req.headers['if-none-match'], tag)) {
+  // body, which is the point of conditional reads (P5 Â§A.7).
+  if (matchesIfNoneMatch(req.headers['if-none-match'], tag)) {
     return res.status(304).end();
   }
 
@@ -208,9 +208,9 @@ router.post('/:orderId/cancellation', requireScope('orders:write'), (req, res) =
   //
   // Optional but honoured. Existing clients that never send If-Match keep
   // working unchanged; a client that does send it can no longer overwrite a
-  // change it has not seen (P5 §A.8.1).
+  // change it has not seen (P5 Â§A.8.1).
   const ifMatch = req.headers['if-match'];
-  if (ifMatch && !matchesStrong(ifMatch, orderVersion(order))) {
+  if (ifMatch && !matchesIfMatch(ifMatch, orderVersion(order))) {
     return sendProblem(
       res,
       preconditionFailed(
@@ -277,12 +277,12 @@ router.post('/:orderId/fulfilment', requireScope('orders:fulfil'), (req, res) =>
 
   // Conditional write: without a precondition the server has no basis for
   // refusing a write that overwrites somebody else's change, and two windows
-  // pressing Accept both succeed with the second silently winning — the lost
-  // update (P5 §A.8.1). Optional, so clients that do not send it are
+  // pressing Accept both succeed with the second silently winning â€” the lost
+  // update (P5 Â§A.8.1). Optional, so clients that do not send it are
   // unaffected; naturally idempotent, so a repeated claim by the same outlet
   // is still accepted rather than turned into a 412.
   const ifMatch = req.headers['if-match'];
-  if (ifMatch && !matchesStrong(ifMatch, orderVersion(order))) {
+  if (ifMatch && !matchesIfMatch(ifMatch, orderVersion(order))) {
     return sendProblem(
       res,
       preconditionFailed(

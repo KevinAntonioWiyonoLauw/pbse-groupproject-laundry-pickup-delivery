@@ -29,6 +29,17 @@ app.set('etag', 'strong');
 // authenticated, so it must be answered before `authenticate` runs.
 app.use(cors(config.CORS_ALLOWED_ORIGINS));
 
+// Intermediaries re-encode JSON (Cloudflare uses Brotli) and, because that
+// transforms the representation, weaken the validator to `W/"..."`. A weak
+// tag cannot satisfy `If-Match` under strict strong comparison, so a browser
+// could never complete a single conditional write. `no-transform` asks them
+// not to re-encode at all; `conditional.js` compares the opaque value as the
+// fallback for any intermediary that ignores the directive.
+app.use((_req, res, next) => {
+  res.set('Cache-Control', 'no-transform');
+  next();
+});
+
 app.use(express.json());
 
 // Public: the platform probes readiness without a token.
