@@ -98,6 +98,15 @@ jobs:
         run: |
           pnpm --dir service run test:shutdown
 
+      # prepare.mjs writes two files with opposite requirements: the realm
+      # template must be regenerated every run, the credentials must not be.
+      # Getting either wrong is silent — a stale template means a widened
+      # scope never reaches the provider, and regenerated credentials mean
+      # every fixture account stops working.
+      - name: Run prepare.mjs idempotency test
+        run: |
+          pnpm --dir service run test:prepare
+
       - name: Run Redocly OpenAPI Lint
         run: |
           pnpm --package=@redocly/cli dlx redocly lint openapi.yaml

@@ -15,7 +15,8 @@
     "test:web": "node ../tests/web/test-web-behaviour.js",
     "test:weak-etag": "node ../tests/web/test-weak-etag.js",
     "test:shutdown": "node ../tests/web/test-graceful-shutdown.js",
-    "test": "npm run test:migration && npm run test:authz && npm run test:contract && npm run test:persistence && npm run test:concurrency && npm run test:web && npm run test:weak-etag && npm run test:shutdown"
+    "test:prepare": "node ../tests/authz/test-prepare-idempotent.js",
+    "test": "npm run test:migration && npm run test:authz && npm run test:contract && npm run test:persistence && npm run test:concurrency && npm run test:web && npm run test:weak-etag && npm run test:shutdown && npm run test:prepare"
   },
   "dependencies": {
     "better-sqlite3": "^11.0.0",

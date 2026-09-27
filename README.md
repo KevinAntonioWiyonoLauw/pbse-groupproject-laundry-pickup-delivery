@@ -181,6 +181,13 @@ lalu menyimpannya **hanya** di `auth/keycloak/.runtime/credentials.json`
 (gitignored, permission `0600`). Tidak ada credential pada public client atau
 output perintah. Jangan tempel isinya ke chat, commit, screenshot, atau log.
 
+> **`prepare.mjs` aman dijalankan berulang kali.** Ia menulis dua file dengan
+> kebutuhan yang berlawanan: **template realm di-regenerate setiap kali**
+> (supaya perubahan skrip benar-benar sampai ke provider), sedangkan
+> **password dipertahankan** (supaya akun tidak mati). Keduanya pernah salah
+> dan keduanya senyap gejalanya, jadi keduanya dikunci oleh
+> `tests/authz/test-prepare-idempotent.js`.
+
 ### Memperbaiki realm yang sudah ada
 
 `import.mjs` bersifat idempotent: ia membuat client scope yang hilang,

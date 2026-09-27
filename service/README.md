@@ -34,6 +34,7 @@ cp .env.example .env
 | `OIDC_ISSUER` | Ya | - | Issuer dari discovery document OIDC |
 | `OIDC_JWKS_URI` | Ya | - | URL JWKS publik authorization server |
 | `OIDC_AUDIENCE` | Ya | - | Audience API yang didaftarkan pada authorization server |
+| `CORS_ALLOWED_ORIGINS` | Tidak | kosong | Origin browser yang boleh membaca respons, dipisah koma |
 
 Service gagal start (exit non-zero) jika salah satu variable wajib kosong. Uji:
 
@@ -41,6 +42,20 @@ Service gagal start (exit non-zero) jika salah satu variable wajib kosong. Uji:
 OIDC_ISSUER= node src/app.js
 # FATAL  Missing required environment variable: OIDC_ISSUER
 ```
+
+`CORS_ALLOWED_ORIGINS` divalidasi saat startup: setiap entri harus berupa
+origin lengkap (`scheme://host[:port]`) **tanpa** path dan tanpa wildcard. Entri
+yang salah format membuat service gagal start, bukan gagal diam-diam saat
+dipakai browser:
+
+```bash
+CORS_ALLOWED_ORIGINS="http://localhost:5173/" node src/app.js
+# FATAL  CORS_ALLOWED_ORIGINS entry must be a bare origin (scheme://host[:port]), got: http://localhost:5173/
+```
+
+Kosong adalah nilai yang sah: tidak ada origin browser yang diizinkan, yang
+merupakan default tepat untuk service yang hanya dipanggil test dan klien
+server-side.
 
 ## Database
 
@@ -87,6 +102,61 @@ mutasi/response. Pemeriksaan scope **selalu** mendahului query database, sehingg
 (status, header, dan body Problem Details). Instance path pun disamakan
 (`/v1/orders/{orderId}`), karena instance yang berbeda juga bisa dipakai untuk
 enumerasi.
+
+## Perilaku untuk Client Browser (P5)
+
+Tiga hal yang dibutuhkan browser dan dikerjakan di service.
+
+### CORS
+
+`src/cors.js`, dipasang **sebelum** `authenticate` karena preflight tidak
+membawa header `Authorization` dan karena itu tidak mungkin diautentikasi.
+
+- Daftar origin eksplisit dari `CORS_ALLOWED_ORIGINS`. Origin yang tidak
+  terdaftar **tidak pernah** di-reflect.
+- `Vary: Origin` pada **semua** respons, bukan hanya yang diizinkan. Service
+  berada di belakang Cloudflare, dan tanpa `Vary` sebuah cache dapat menyajikan
+  respons milik satu origin kepada klien dari origin lain.
+- Tanpa `Access-Control-Allow-Credentials`: autentikasi memakai Bearer token,
+  bukan cookie.
+- `Access-Control-Allow-Headers` memuat `If-Match` dan `If-None-Match` karena
+  keduanya bukan CORS-safelisted request header dan akan memicu preflight.
+- `Access-Control-Expose-Headers` memuat `ETag`, `Location`, `X-Next-Cursor`,
+  dan `Retry-After`. Tanpa ini browser membaca `null` untuk penanda versi dan
+  cursor halaman berikutnya.
+- Preflight `OPTIONS` dijawab `204`, dengan header CORS bila origin terdaftar
+  dan tanpa header itu bila tidak.
+
+### Conditional read
+
+`GET` pada entitas (`/v1/orders/{orderId}`) dan koleksi (`/v1/orders`,
+`/v1/pickups`) mengembalikan `ETag` strong yang dibangun dari field versi
+entitas (`src/conditional.js`), bukan hash body.
+
+`304` ditangani **eksplisit**, bukan lewat `req.fresh` bawaan Express.
+`fetch()` menyuntikkan `Cache-Control: no-cache` ketika mengirim
+`If-None-Match`, dan modul `fresh` melaporkan permintaan `no-cache` sebagai
+stale — sehingga mengandalkannya berarti `304` tidak pernah muncul dari browser
+maupun dari test yang ditulis dengan `fetch`.
+
+### Conditional write
+
+`POST` pada `/orders/{orderId}/fulfilment`, `/orders/{orderId}/cancellation`,
+dan `/pickups/{pickupId}/collect` menghormati `If-Match` bila dikirim. Bila
+entitas sudah berubah, jawabannya `412` dengan problem type
+`precondition-failed`.
+
+**Header ini opsional.** Klien yang tidak mengirimnya mempertahankan perilaku
+sebelum `1.3.0`, sehingga test P3/P4 tetap lulus tanpa diubah.
+
+`If-Match` membandingkan **nilai** validator dan mengabaikan prefix weak
+(`W/`). Alasannya diukur, bukan teoretis: Cloudflare meng-encode ulang respons
+JSON dan, karena itu mentransformasi representasi, melemahkan validator
+menjadi `W/"..."`. Browser selalu memegang bentuk weak itu dan mengirimnya
+kembali, sehingga strong comparison yang ketat berarti **setiap** write dijawab
+`412` — termasuk yang pertama. Perbandingan nilai aman di sini karena tag ini
+penanda versi entitas, bukan checksum byte. `Cache-Control: no-transform` juga
+dikirim untuk menghentikan pelemahan di sumbernya.
 
 ## Daftar Endpoint
 
@@ -145,8 +215,8 @@ pemetaan role lengkap ada di `docs/p4-contract-handoff.md`.
 
 | Route | Aturan Kepemilikan Objek | Penolakan Bukan Milik |
 |---|---|---|
-| `GET /v1/orders` | Customer: `WHERE customer_id = principal.domainId`. Staff: `WHERE outlet_id = principal.outletId`. Dibatasi di query database, bukan filter di JavaScript. | - (difilter di query) |
-| `GET /v1/orders/{orderId}` | Order milik customer (`domainId === customer_id`), **atau** staff outlet yang order itu terikat padanya (`outlet_id === principal.outletId`), **atau** driver yang ditugaskan pada pickup order tersebut. | `404` identik |
+| `GET /v1/orders` | Customer: `WHERE customer_id = principal.domainId`. Staff: `WHERE (outlet_id = principal.outletId OR outlet_id IS NULL)` — order yang belum diterima outlet mana pun adalah antrean masuk staff. Dibatasi di query database, bukan filter di JavaScript. | - (difilter di query) |
+| `GET /v1/orders/{orderId}` | Order milik customer (`domainId === customer_id`), **atau** staff yang boleh melihatnya (`mayStaffSeeOrder`: belum terikat outlet, atau terikat outletnya sendiri), **atau** driver yang ditugaskan pada pickup order tersebut. | `404` identik |
 | `POST /v1/orders` | Customer hanya boleh membuat order untuk identitas domain miliknya (`body.customerId === principal.domainId`). Order baru belum terikat outlet (`outlet_id = NULL`). | `404` identik |
 | `POST /v1/orders/{orderId}/cancellation` | Hanya customer pemilik order. Ownership diperiksa **sebelum** status diubah; urutan status bisnis diperiksa setelahnya. | `404` identik |
 | `POST /v1/orders/{orderId}/fulfilment` | Staff hanya boleh menerima order yang belum terikat outlet mana pun (`outlet_id IS NULL`), atau order yang sudah terikat pada outletnya sendiri. Order yang terikat outlet lain tidak dapat dijangkau. Mutasi (`outlet_id`, `status`) hanya setelah ownership terbukti. | `404` identik |
@@ -253,20 +323,28 @@ node tests/authz/test-authz.js   # termasuk pemeriksaan kebocoran token di outpu
 # Dari root repository
 node tests/authz/test-authz.js                              # 4 negative test + Layer 1
 node tests/authz/verify-checks-are-live.js                  # bukti tiap boundary benar-benar diuji
+node tests/authz/test-prepare-idempotent.js                 # prepare.mjs aman dijalankan ulang
 node tests/contract/test-contract.js                        # terhadap Prism mock
 node tests/contract/run-against-service.js                   # contract suite vs service terautentikasi
 node tests/contract/check-legacy-migration.js                # migrasi database P3 in-place
 node tests/contract/test-persistence-restart.js              # persistensi lintas restart
 node tests/contract/test-idempotency-concurrency.js          # idempotency di bawah concurrency
+node tests/web/test-web-behaviour.js                         # CORS, visibilitas staff, 304/412
+node tests/web/test-weak-etag.js                             # validator weak dari proxy
+node tests/web/test-graceful-shutdown.js                     # SIGTERM -> exit 0
 npx @redocly/cli lint openapi.yaml
 ```
 
 Atau dari `service/`:
 
 ```bash
-pnpm run test          # migration + authz + contract + persistence + concurrency
+pnpm run test          # seluruh suite di atas (kecuali lint)
 pnpm run test:authz
 pnpm run test:authz-live
+pnpm run test:web
+pnpm run test:weak-etag
+pnpm run test:shutdown
+pnpm run test:prepare
 ```
 
 Semua test auth memakai **signing key khusus test** (`tests/helpers/harness.js`)
@@ -274,6 +352,10 @@ dan menjalankan service terhadap JWKS lokal, sehingga CI tidak bergantung pada
 network atau authorization server live. Verifier tetap menjalankan seluruh
 pemeriksaan (signature, algoritma, issuer, audience, expiry) — tidak ada jalur
 bypass autentikasi untuk test.
+
+`test-graceful-shutdown.js` mengirim `SIGTERM` sungguhan. Windows tidak
+memiliki signal POSIX, jadi di sana jalur itu dilaporkan **dilewati**, bukan
+lulus diam-diam; verifikasi otoritatifnya berjalan di CI (Linux).
 
 ## Known Issues / Batasan
 
@@ -285,6 +367,15 @@ bypass autentikasi untuk test.
 - `GET /v1/pickups` memakai cursor pagination yang sama dengan `GET /v1/orders`.
 - Bukti refresh-token rotation berada di `docs/decisions/0003-autentikasi.md`
   dan dijalankan manual terhadap Keycloak lokal (bukan bagian dari test CI).
+- Tidak ada `GET /v1/pickups/{pickupId}` di kontrak, sehingga `ETag` per-pickup
+  tidak dapat diperoleh client. `If-Match` pada `collectPickup` tetap dihormati
+  bila dikirim, tetapi client tidak punya cara resmi memperoleh nilainya.
+- Status `ready_for_pickup`, `confirmed`, `assigned`, `completed`, dan
+  `delivered` ada di enum kontrak tetapi tidak pernah ditulis oleh operasi mana
+  pun; service hanya menghasilkan `pending_pickup`, `processing`, `cancelled`
+  untuk order dan `assigned`, `picked_up` untuk pickup.
+- Database SQLite pada deployment bersifat **ephemeral**: data hilang saat
+  redeploy. Siapkan data demo setelah deploy terakhir.
 
 ## P3 Verification Commands
 

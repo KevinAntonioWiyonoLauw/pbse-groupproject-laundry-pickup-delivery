@@ -182,6 +182,40 @@ async function ensureClientScopeBinding(api, scopeByName) {
   }
 }
 
+/**
+ * Put the capability scopes a client may *request* on it as optional scopes.
+ *
+ * The web application serves staff and customer, so it must be able to ask for
+ * `orders:write` even though a staff account will never be granted it. This is
+ * additive and driven by the realm template, so a realm created from
+ * `prepare.mjs` and a realm repaired by this script end up with the same
+ * requestable set — without this, widening the template silently does nothing
+ * on an already-imported realm, and the web client's login fails with
+ * `invalid_scope` at the provider instead of at the service.
+ */
+async function ensureOptionalClientScopes(api, scopeByName) {
+  for (const clientId of PUBLIC_CLIENTS) {
+    const wanted = realmJson.clients.find((c) => c.clientId === clientId)?.optionalClientScopes ?? [];
+    if (wanted.length === 0) continue;
+
+    const clients = await (await api(`/clients?clientId=${encodeURIComponent(clientId)}`)).json();
+    const client = clients.find((c) => c.clientId === clientId);
+    assert.ok(client, `client '${clientId}' not found in realm '${realmName}'`);
+
+    const current = await (await api(`/clients/${client.id}/optional-client-scopes`)).json();
+    for (const name of wanted) {
+      if (current.some((s) => s.name === name)) {
+        console.log(`'${clientId}': already offers '${name}'`);
+        continue;
+      }
+      const scope = scopeByName[name];
+      assert.ok(scope, `optional scope '${name}' for '${clientId}' is not declared in the realm template`);
+      await api(`/clients/${client.id}/optional-client-scopes/${scope.id}`, { method: 'PUT' });
+      console.log(`'${clientId}': '${name}' added to optional client scopes`);
+    }
+  }
+}
+
 /** Ensure each fixture user carries the attributes the mappers publish. */
 async function ensureUserAttributes(api) {
   const wanted = realmJson.users.filter((u) => u.attributes);
@@ -368,6 +402,15 @@ async function main() {
     scopeByName[name] = await ensureClientScope(api, name);
   }
   await ensureClientScopeBinding(api, scopeByName);
+
+  // Capability scopes are looked up rather than created: they are declared by
+  // the realm template and must already exist. Reading them here lets
+  // `ensureOptionalClientScopes` attach them to a client.
+  const allScopes = await (await api('/client-scopes')).json();
+  for (const scope of allScopes) {
+    if (!scopeByName[scope.name]) scopeByName[scope.name] = scope;
+  }
+  await ensureOptionalClientScopes(api, scopeByName);
   // Profile first: an attribute that is not declared is discarded without an
   // error, so writing attributes before declaring them silently does nothing.
   await ensureUserProfile(api);

@@ -1,15 +1,34 @@
-import { mkdir, writeFile, access } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 
 const runtime = new URL('./.runtime/', import.meta.url);
 await mkdir(runtime, { recursive: true, mode: 0o700 });
+
+/**
+ * Reuse the credentials that already exist, but always regenerate the realm
+ * template.
+ *
+ * This script used to exit as soon as `credentials.json` was present, which
+ * meant `laundry-realm.json` was written once and then frozen. Every later
+ * change to this file — a new client scope, a widened `optionalClientScopes`,
+ * an extra mapper — silently had no effect on any machine that had already run
+ * the script, and the only symptom was a provider that kept rejecting a
+ * request the code now makes.
+ *
+ * Passwords are the one thing that must survive: regenerating them would
+ * invalidate every stored credential and break `import.mjs`, which reads them
+ * back. The template is derived from this file, so it is rebuilt every run.
+ */
+let credentials = { admin: randomBytes(32).toString('base64url'), scheduledJob: randomBytes(32).toString('base64url'), users: {} };
+let preserved = false;
 try {
-  await access(new URL('credentials.json', runtime));
-  console.log('Existing local configuration preserved.');
-  process.exit(0);
+  const existing = JSON.parse(await readFile(new URL('credentials.json', runtime), 'utf8'));
+  credentials = { ...credentials, ...existing };
+  preserved = true;
 } catch (error) {
   if (error.code !== 'ENOENT') throw error;
 }
+
 const secret = () => randomBytes(32).toString('base64url');
 const permissions = ['orders:read', 'orders:write', 'pickups:read', 'orders:fulfil', 'pickups:write'];
 const actors = {
@@ -22,7 +41,6 @@ const fixtures = [
   ['courier-a', 'driver', 'drv_courierA', null], ['courier-b', 'driver', 'drv_courierB', null],
   ['staff-outlet-a', 'staff', 'outlet_a', 'outlet_a'], ['staff-outlet-b', 'staff', 'outlet_b', 'outlet_b'],
 ];
-const credentials = { admin: secret(), scheduledJob: secret(), users: {} };
 
 // Claims the resource server maps into its internal principal. Keycloak does
 // not publish user attributes in a token by itself: an explicit
@@ -165,7 +183,15 @@ const realm = {
     { clientScope: 'roles', roles: Object.keys(actors) },
   ],
   clients: [
-    publicClient('laundry-web', ['http://localhost:5173/callback'], ['http://localhost:5173'], actors.staff),
+    // The web application serves both roles, and P5 §A.2.2 requires the menu
+    // rendered for staff and for customer to differ. That needs `orders:write`
+    // to be requestable by this client. Widening the requestable set does not
+    // widen the granted set: `fullScopeAllowed: false` plus `scopeMappings`
+    // means the grant is still decided by the user's role, so a staff account
+    // still never receives `orders:write` and a customer never receives
+    // `orders:fulfil`.
+    publicClient('laundry-web', ['http://localhost:5173/callback'], ['http://localhost:5173'],
+      [...new Set([...actors.staff, ...actors.customer])]),
     publicClient('laundry-mobile', ['id.ac.ugm.laundry://oauth/callback'], [], [...actors.customer, ...actors.driver]),
     { clientId: 'laundry-scheduled-job', enabled: true, protocol: 'openid-connect',
       publicClient: false, clientAuthenticatorType: 'client-secret', secret: credentials.scheduledJob,
@@ -176,7 +202,12 @@ const realm = {
   ],
   users: [
     ...fixtures.map(([username, actor, domainId, outletId]) => {
-      const password = secret();
+      // Reuse the stored password when one exists. Generating a new one on
+      // every run would silently invalidate every account: the realm template
+      // is regenerated each time, and `import.mjs` writes these values back to
+      // the provider, so a fresh password here means every fixture user's
+      // credentials change underneath whoever is holding them.
+      const password = credentials.users[username] ?? secret();
       credentials.users[username] = password;
       // `outlet_id` is present only for staff: a staff principal acts for
       // exactly one outlet, and that binding must come from the provider so a
@@ -196,4 +227,6 @@ const realm = {
 await writeFile(new URL('laundry-realm.json', runtime), JSON.stringify(realm, null, 2), { mode: 0o644 });
 await writeFile(new URL('.env', runtime), `KC_BOOTSTRAP_ADMIN_PASSWORD=${credentials.admin}\n`, { mode: 0o600 });
 await writeFile(new URL('credentials.json', runtime), JSON.stringify(credentials, null, 2), { mode: 0o600 });
-console.log('Local realm and private credentials generated in auth/keycloak/.runtime/. No secrets printed.');
+console.log(preserved
+  ? 'Realm template regenerated; existing credentials preserved.'
+  : 'Local realm and private credentials generated in auth/keycloak/.runtime/. No secrets printed.');

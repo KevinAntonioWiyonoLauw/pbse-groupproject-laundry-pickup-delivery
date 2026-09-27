@@ -10,7 +10,16 @@
 //     sebagai tidak dapat diuji di platform ini, bukan lulus diam-diam.
 //
 // Jalur deployment adalah Linux (Railway), jadi verifikasi otoritatifnya
-// dijalankan lewat Docker: lihat `docker stop` pada tests/web/README-shutdown.md.
+// berjalan di CI (langkah `test:shutdown` pada .github/workflows/ci.yml) dan
+// dapat diulang manual dengan Docker:
+//
+//   docker build -t laundry-check .
+//   docker run -d --name laundry-check -p 18099:8080 \
+//     -e PORT=8080 -e DATABASE_FILE=./db/laundry.sqlite \
+//     -e OIDC_ISSUER=... -e OIDC_JWKS_URI=... -e OIDC_AUDIENCE=laundry-api \
+//     laundry-check
+//   docker stop laundry-check
+//   docker inspect laundry-check --format '{{.State.ExitCode}}'   # harus 0
 
 const path = require("node:path");
 const fs = require("node:fs");

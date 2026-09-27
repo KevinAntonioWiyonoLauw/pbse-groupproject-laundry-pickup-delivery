@@ -264,20 +264,89 @@ node auth/keycloak/verify-deployment.mjs \
   https://keycloak-production-68f0.up.railway.app
 ```
 
-Hasil: 15 pemeriksaan lulus, termasuk **token asli diterima (`200`)** — bukan
-hanya penolakan tanpa token. Pemeriksaan lain: `403` scope kurang, `403` sebelum
-object di-load, `404` object milik caller lain, body `404` identik, `201` create
-order dengan identitas domain dari claim, dan outlet binding dari token.
+Hasil: **25 pemeriksaan lulus** (27 September 2026), termasuk **token asli
+diterima (`200`)** — bukan hanya penolakan tanpa token. Pemeriksaan lain:
+`403` scope kurang, `403` sebelum object di-load, `404` object milik caller
+lain, body `404` identik, `201` create order dengan identitas domain dari claim,
+outlet binding dari token, serta perilaku browser: preflight CORS, `ETag`
+ter-expose, `304` pada read tak berubah, antrean masuk staff dapat dibuka, dan
+`412` pada validator basi.
 
 Refresh rotation + family revocation juga dibuktikan pada provider production
 (`auth/keycloak/test-refresh-rotation.mjs <origin>`) untuk web dan mobile.
 
 ### 11.3 Sisa pekerjaan
 
-- **Commit, tag `l4`, dan push** — belum dilakukan; menunggu persetujuan tim
-  setelah final gate lulus.
 - Provider dan resource server berada pada project Railway berbeda, sehingga
   `OIDC_JWKS_URI` memakai domain publik. Host `*.railway.internal` tidak resolve
   antar project.
 - `KC_HOSTNAME` sebaiknya dipin ke origin publik agar claim `iss` tidak
   bergantung pada Host header request.
+- Database SQLite pada Railway bersifat ephemeral: data hilang saat redeploy.
+
+---
+
+## 12. Revisi setelah P5 (27 September 2026)
+
+Pemeriksaan production di §11.2 sebelumnya melaporkan 15 pemeriksaan. Angka itu
+**tidak lagi berlaku**, dan dua klaim pada §11 perlu dikoreksi.
+
+### 12.1 Klaim yang tidak dapat diverifikasi
+
+§11.1 menyatakan perbaikan claim `fixture_domain_id`/`outlet_id` "selesai", dan
+§11.2 menyatakan 15 pemeriksaan production lulus. Saat diperiksa langsung pada
+27 September 2026, **attribute identitas tidak tersimpan pada satu pun user**
+di realm hosted.
+
+Keycloak 24+ memvalidasi user terhadap *declarative user profile*, dan attribute
+yang tidak dideklarasikan di sana **dibuang tanpa error**: admin API menjawab
+`204 No Content` dan nilainya tidak pernah muncul. Realm hosted berjalan pada
+Keycloak 26.7.4 dengan profil hanya berisi `username`, `email`, `firstName`,
+`lastName`.
+
+Akibatnya `principal.js` jatuh ke fallback `sub` — UUID internal Keycloak, bukan
+`cus_studentA` — sehingga setiap perbandingan kepemilikan menjadi UUID melawan
+identifier domain dan **setiap object dijawab `404`**. Pemeriksaan seperti
+`201 create order` dan `staff fulfilment -> 200` tidak mungkin lulus dalam
+keadaan itu.
+
+Penyebabnya: `import.mjs` mengirim `PUT` lalu melaporkan sukses **tanpa membaca
+ulang**, sehingga penulisan yang dibuang tidak terdeteksi.
+
+### 12.2 Perbaikan
+
+| Perbaikan | Bukti |
+|---|---|
+| Deklarasi `fixture_domain_id`, `outlet_id`, `actor` di user profile realm | `import.mjs` melaporkan "declared" |
+| Tulis attribute ke 6 user dengan **verifikasi baca ulang** | Semua "attributes verified" |
+| Read-back menutup celah senyap | Langsung menemukan attribute `actor` yang juga dibuang |
+| `verify.mjs` memeriksa keanggotaan callback, bukan `length === 1` | Origin kedua dapat didaftarkan tanpa memerahkan verifikasi P4 |
+| `import.mjs` merekonsiliasi `optionalClientScopes` | Realm baru dan realm lama punya himpunan scope yang sama |
+| `prepare.mjs` me-regenerate template tapi **mempertahankan password** | Password stabil di tiga run berturut-turut |
+
+### 12.3 Bug yang hanya muncul di production
+
+Dua bug ditemukan setelah deploy pertama dan tidak dapat direproduksi di
+localhost. Keduanya kini dikunci oleh test regresi.
+
+| Bug | Gejala | Perbaikan | Test |
+|---|---|---|---|
+| Cloudflare melemahkan `ETag` menjadi `W/"..."` saat mengompres, dan `If-Match` memakai strong comparison | Setiap write dijawab `412`, termasuk yang pertama | `matchesIfMatch` membandingkan nilai validator, mengabaikan prefix weak; `Cache-Control: no-transform` | `tests/web/test-weak-etag.js` |
+| Prepared statement module-scope dihancurkan setelah V8 teardown pada `SIGTERM` | `Assertion failed: (env) != nullptr`, exit `134`, deploy sehat terlihat gagal | Jalur shutdown eksplisit: tutup server, tutup handle SQLite, `exit 0` | `tests/web/test-graceful-shutdown.js` |
+
+### 12.4 Suite verifikasi saat ini
+
+| Suite | Hasil |
+|---|---|
+| `test:migration` | Lulus |
+| `test:authz` | Lulus (40 pemeriksaan) |
+| `test:contract` | 33/33 |
+| `test:persistence` | Lulus |
+| `test:concurrency` | Lulus (5 request paralel, 1 baris) |
+| `test:web` | 26/26 |
+| `test:weak-etag` | 7/7 |
+| `test:shutdown` | 8/8 (1 dilewati di Windows) |
+| `test:prepare` | 11/11 |
+| `verify-deployment.mjs` | 25/25 terhadap deployment |
+| Redocly lint | Valid, 2 warning (turun dari 3) |
+
