@@ -46,4 +46,34 @@ function migrate() {
 migrate();
 db.exec(schemaSQL);
 
+/**
+ * Close the handle while the process is still fully alive.
+ *
+ * Every store prepares its statements at module scope, so they are still open
+ * when the process ends. Without an explicit close, Node tears down the V8
+ * environment first and the native `Statement` destructors run against an
+ * already-destroyed environment, which aborts the process:
+ *
+ *   Statement::~Statement() [better_sqlite3.node]
+ *   node::RemoveEnvironmentCleanupHook(...) at ../src/api/hooks.cc:142
+ *   Assertion failed: (env) != nullptr
+ *   Aborted  (exit code 134)
+ *
+ * The crash happens on the way out, so the service itself keeps working — but
+ * a platform that watches the exit code (Railway sends SIGTERM on every
+ * redeploy) reads `134` as a failed shutdown and reports the deploy as
+ * crashed. Closing here, before the signal handler returns, keeps the
+ * destructors on a live environment.
+ */
+function closeDatabase() {
+  if (!db.open) return;
+  try {
+    db.close();
+  } catch {
+    // Nothing useful can be done if the handle is already unusable; the
+    // process is exiting either way.
+  }
+}
+
 module.exports = db;
+module.exports.closeDatabase = closeDatabase;

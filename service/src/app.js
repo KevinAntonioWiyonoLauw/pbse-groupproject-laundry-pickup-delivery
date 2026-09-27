@@ -1,7 +1,9 @@
 'use strict';
 
 const config = require('./config');
-require('./database');
+// Required for its side effect (schema + migration) and kept for shutdown:
+// the native handle must be closed while the runtime is still alive.
+const database = require('./database');
 
 const express = require('express');
 const ordersRouter = require('./routes/orders');
@@ -75,10 +77,42 @@ app.use((err, req, res, _next) => {
 });
 
 if (require.main === module) {
-  app.listen(config.PORT, () => {
+  const server = app.listen(config.PORT, () => {
     console.log(`Laundry service listening on http://127.0.0.1:${config.PORT}`);
     console.log(`Health check: http://127.0.0.1:${config.PORT}/health`);
   });
+
+  /**
+   * Shut down deliberately instead of letting the process be killed.
+   *
+   * Railway sends SIGTERM on every redeploy. Without a handler Node begins
+   * tearing down immediately, and the native SQLite statements that the stores
+   * prepared at module scope are destroyed against an environment that no
+   * longer exists — the process then aborts with exit code 134. The platform
+   * reads a non-zero exit as a failed deploy even though the service was
+   * healthy the whole time.
+   *
+   * Closing the server first stops accepting new work, then the database is
+   * closed while the runtime is still intact.
+   */
+  let shuttingDown = false;
+  const shutdown = (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Received ${signal}, shutting down.`);
+    server.close(() => {
+      database.closeDatabase();
+      process.exit(0);
+    });
+    // A connection that never goes idle must not hold the process open.
+    setTimeout(() => {
+      database.closeDatabase();
+      process.exit(0);
+    }, 5000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;

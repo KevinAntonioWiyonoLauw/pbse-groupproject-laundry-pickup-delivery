@@ -90,6 +90,14 @@ jobs:
         run: |
           pnpm --dir service run test:weak-etag
 
+      # SIGTERM must produce exit code 0. Native SQLite statements prepared at
+      # module scope are otherwise destroyed after V8 teardown, which aborts
+      # the process (134) and makes a healthy deploy look like a crash.
+      # CI runs on Linux, so the real signal is delivered here.
+      - name: Run graceful shutdown test
+        run: |
+          pnpm --dir service run test:shutdown
+
       - name: Run Redocly OpenAPI Lint
         run: |
           pnpm --package=@redocly/cli dlx redocly lint openapi.yaml
