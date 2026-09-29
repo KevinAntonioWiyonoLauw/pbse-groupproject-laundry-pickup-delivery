@@ -353,14 +353,38 @@ dan **Keluar** tetap diproses di aplikasi pada `localhost:3000`.
 
 ### Alamat aplikasi ter-deploy
 
-_Belum di-deploy._ Deploy dibuat dari folder `clients/web` dengan framework
-Next.js. Pada project Vercel, isi **Root Directory** dengan `clients/web` dan
-gunakan build command default Next.js. Tambahkan `NEXT_PUBLIC_API_BASE_URL`,
-`NEXT_PUBLIC_OIDC_ISSUER`, `NEXT_PUBLIC_OIDC_CLIENT_ID`,
-`NEXT_PUBLIC_OIDC_REDIRECT_URI`, `NEXT_PUBLIC_OIDC_AUDIENCE`, dan
-`NEXT_PUBLIC_OIDC_SCOPE` pada environment production. Setelah URL Vercel tersedia,
-daftarkan URL callback `/callback` dan URL asalnya pada provider OIDC, lalu
-ganti placeholder di bagian ini dan `NEXT_PUBLIC_OIDC_REDIRECT_URI` dengan URL final.
+**https://pbse-laundry.kevinio.my.id**
+
+Deploy dibuat dari folder `clients/web` dengan framework Next.js. Pada project
+Vercel, **Root Directory** diisi `clients/web` dan build command default Next.js.
+Environment production yang dipakai:
+
+| Variabel | Nilai produksi |
+|---|---|
+| `NEXT_PUBLIC_API_BASE_URL` | `https://pbse.kevinio.my.id/v1` |
+| `NEXT_PUBLIC_OIDC_ISSUER` | `https://keycloak-production-68f0.up.railway.app/realms/laundry` |
+| `NEXT_PUBLIC_OIDC_CLIENT_ID` | `laundry-web` |
+| `NEXT_PUBLIC_OIDC_REDIRECT_URI` | `https://pbse-laundry.kevinio.my.id/callback` |
+| `NEXT_PUBLIC_OIDC_AUDIENCE` | `laundry-api` |
+| `NEXT_PUBLIC_OIDC_SCOPE` | `openid offline_access orders:read orders:write orders:fulfil pickups:read` |
+
+Origin web ter-deploy terdaftar di **dua** tempat, dan keduanya wajib:
+
+1. `redirectUris` + `webOrigins` client `laundry-web` pada realm:
+   ```bash
+   WEB_ORIGINS=https://pbse-laundry.kevinio.my.id \
+     node auth/keycloak/import.mjs https://keycloak-production-68f0.up.railway.app
+   ```
+   `ensureClientOrigins` bersifat additive: origin lokal tidak dihapus, dan
+   tidak ada wildcard.
+2. `CORS_ALLOWED_ORIGINS` pada service ter-deploy:
+   ```
+   CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,https://pbse-laundry.kevinio.my.id
+   ```
+
+> **Peringatan:** preview deployment Vercel punya URL acak yang **tidak**
+> terdaftar di CORS maupun Keycloak. Demonstrasi wajib memakai URL produksi di
+> atas.
 
 ### Akun uji untuk presentasi
 

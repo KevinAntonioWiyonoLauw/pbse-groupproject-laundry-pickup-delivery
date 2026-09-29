@@ -61,9 +61,14 @@ export default function OrderDetailPage() {
   };
   const dispatch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    // React nulls `event.currentTarget` once the handler returns, and `await`
+    // yields to the event loop before that. Reading it after the request would
+    // therefore throw "Cannot read properties of null (reading 'reset')" even
+    // though the pickup was created. Capture the element up front.
+    const form = event.currentTarget;
+    const data = new FormData(form);
     dispatchKey.current ??= crypto.randomUUID();
-    try { await authenticatedRequest<Pickup>('/pickups', { method: 'POST', headers: { 'Idempotency-Key': dispatchKey.current }, body: JSON.stringify({ orderId: order.id, driverId: String(data.get('driverId')), scheduledAt: new Date(String(data.get('scheduledAt'))).toISOString() }) }); dispatchKey.current = null; setMessage('Pickup berhasil ditugaskan.'); event.currentTarget.reset(); }
+    try { await authenticatedRequest<Pickup>('/pickups', { method: 'POST', headers: { 'Idempotency-Key': dispatchKey.current }, body: JSON.stringify({ orderId: order.id, driverId: String(data.get('driverId')), scheduledAt: new Date(String(data.get('scheduledAt'))).toISOString() }) }); dispatchKey.current = null; setMessage('Pickup berhasil ditugaskan.'); form.reset(); }
     catch (requestError) { setMessage(apiMessage(requestError)); }
   };
 

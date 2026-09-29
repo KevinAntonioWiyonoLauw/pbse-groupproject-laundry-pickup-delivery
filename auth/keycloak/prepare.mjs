@@ -149,7 +149,17 @@ const publicClient = (clientId, callbacks, origins, scopes) => ({
   standardFlowEnabled: true, implicitFlowEnabled: false,
   directAccessGrantsEnabled: false, serviceAccountsEnabled: false,
   fullScopeAllowed: false, redirectUris: callbacks, webOrigins: origins,
-  attributes: { 'pkce.code.challenge.method': 'S256', 'use.refresh.tokens': 'true' },
+  attributes: {
+    'pkce.code.challenge.method': 'S256',
+    'use.refresh.tokens': 'true',
+    // Keycloak issues an offline token only when BOTH the client and the user
+    // are allowed to use one. Without these two switches, requesting
+    // `offline_access` is accepted at the authorize step and then fails at the
+    // token endpoint with "Offline tokens not allowed for the user or client".
+    // The web client needs it: the access token lives 300 seconds, and a
+    // browser session has to outlive that without a re-login.
+    'offline.access': 'true',
+  },
   defaultClientScopes: ['basic', 'roles', 'laundry-audience', 'laundry-identity'],
   optionalClientScopes: scopes,
 });
@@ -163,6 +173,11 @@ const realm = {
   roles: { realm: [
     ...permissions.map(name => ({ name })),
     ...Object.entries(actors).map(([name, roles]) => ({ name, composite: true, composites: { realm: roles } })),
+    // Keycloak checks this role before it will mint an offline token for a
+    // user. The `offline_access` client scope adds the role requirement; this
+    // is the role itself. Both are needed, together with the client attribute
+    // of the same name.
+    { name: 'offline_access' },
   ] },
   clientScopes: [
     ...permissions.map(name => ({ name, protocol: 'openid-connect', attributes: { 'include.in.token.scope': 'true' } })),
@@ -172,6 +187,13 @@ const realm = {
       protocolMappers: [{ name: 'laundry-api', protocol: 'openid-connect', protocolMapper: 'oidc-audience-mapper',
         config: { 'included.custom.audience': 'laundry-api', 'access.token.claim': 'true', 'id.token.claim': 'false' } }] },
     identityScope,
+    // Keycloak ships `offline_access` as a built-in scope, but a realm exported
+    // or re-imported without it does not carry it. `import.mjs` only attaches
+    // optional scopes it can find by name, so `offline_access` must be declared
+    // here or the client never offers it. When the client does not offer it,
+    // asking for it makes Keycloak reject the WHOLE authorization request with
+    // "Invalid scopes", even for scopes that are otherwise valid.
+    { name: 'offline_access', protocol: 'openid-connect', attributes: { 'include.in.token.scope': 'true' } },
   ],
   // A scope is available only when the user/service account has the matching role.
   // With `fullScopeAllowed: false` only scope-mapped roles reach the token, so the
@@ -190,6 +212,13 @@ const realm = {
     // means the grant is still decided by the user's role, so a staff account
     // still never receives `orders:write` and a customer never receives
     // `orders:fulfil`.
+    //
+    // `pickups:write` is deliberately absent: it belongs to the driver actor,
+    // and the web client serves staff and customer only. Asking for it makes
+    // Keycloak reject the whole authorization request with
+    // "Invalid scopes", because a client can only request the scopes it
+    // offers. Keep `NEXT_PUBLIC_OIDC_SCOPE` in clients/web/.env.example in
+    // step with this list.
     publicClient('laundry-web', ['http://localhost:3000/callback', 'http://localhost:5173/callback'], ['http://localhost:3000', 'http://localhost:5173'],
       [...new Set([...actors.staff, ...actors.customer, 'offline_access'])]),
     publicClient('laundry-mobile', ['id.ac.ugm.laundry://oauth/callback'], [], [...actors.customer, ...actors.driver]),
@@ -215,7 +244,7 @@ const realm = {
       const attributes = { actor: [actor], fixture_domain_id: [domainId] };
       if (outletId) attributes.outlet_id = [outletId];
       return { username, firstName: username, lastName: 'Test', email: `${username}@example.invalid`,
-        enabled: true, requiredActions: [], realmRoles: [actor],
+        enabled: true, requiredActions: [], realmRoles: [actor, 'offline_access'],
         attributes,
         credentials: [{ type: 'password', value: password, temporary: false }] };
     }),

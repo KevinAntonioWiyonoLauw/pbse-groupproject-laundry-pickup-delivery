@@ -216,6 +216,46 @@ async function ensureOptionalClientScopes(api, scopeByName) {
   }
 }
 
+/**
+ * Reconcile the client attributes a public client needs.
+ *
+ * `optionalClientScopes` is not the only thing that has to be reconciled on an
+ * already-imported realm. The client's `attributes` object decides behaviour
+ * that no scope can express, and `ensureOptionalClientScopes` does not touch
+ * it. The one that matters here is `offline.access`: without it Keycloak
+ * accepts `offline_access` at the authorize step and then refuses to mint the
+ * token, answering `not_allowed` / "Offline tokens not allowed for the user or
+ * client". The failure lands at the token endpoint, far from the setting that
+ * causes it, so it is easy to misdiagnose as a scope problem.
+ *
+ * Additive: only attributes present in the template are set or corrected;
+ * attributes added by an operator on the console are left alone.
+ */
+async function ensureClientAttributes(api) {
+  for (const clientId of PUBLIC_CLIENTS) {
+    const wanted = realmJson.clients.find((c) => c.clientId === clientId)?.attributes ?? {};
+    const entries = Object.entries(wanted);
+    if (entries.length === 0) continue;
+
+    const clients = await (await api(`/clients?clientId=${encodeURIComponent(clientId)}`)).json();
+    const client = clients.find((c) => c.clientId === clientId);
+    assert.ok(client, `client '${clientId}' not found in realm '${realmName}'`);
+
+    const stale = entries.filter(([key, value]) => (client.attributes ?? {})[key] !== value);
+    if (stale.length === 0) {
+      console.log(`'${clientId}': attributes already correct`);
+      continue;
+    }
+
+    const merged = { ...(client.attributes ?? {}), ...Object.fromEntries(stale) };
+    await api(`/clients/${client.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...client, attributes: merged }),
+    });
+    console.log(`'${clientId}': attributes corrected (${stale.map(([key]) => key).join(', ')})`);
+  }
+}
+
 /** Ensure each fixture user carries the attributes the mappers publish. */
 async function ensureUserAttributes(api) {
   const wanted = realmJson.users.filter((u) => u.attributes);
@@ -437,6 +477,7 @@ async function main() {
     if (!scopeByName[scope.name]) scopeByName[scope.name] = scope;
   }
   await ensureOptionalClientScopes(api, scopeByName);
+  await ensureClientAttributes(api);
   // Profile first: an attribute that is not declared is discarded without an
   // error, so writing attributes before declaring them silently does nothing.
   await ensureUserProfile(api);
