@@ -234,6 +234,32 @@ async function ensureUserAttributes(api) {
   }
 }
 
+/** Ensure fixture users retain the actor role used by the web client menu. */
+async function ensureUserRoles(api) {
+  const wantedUsers = realmJson.users.filter((user) => user.realmRoles?.length && !user.serviceAccountClientId);
+  const users = await (await api('/users?max=200')).json();
+  const allRoles = await (await api('/roles')).json();
+  const roleByName = new Map(allRoles.map((role) => [role.name, role]));
+
+  for (const spec of wantedUsers) {
+    const user = users.find((candidate) => candidate.username === spec.username);
+    assert.ok(user, `user '${spec.username}' not found in realm '${realmName}'`);
+    const current = await (await api(`/users/${user.id}/role-mappings/realm`)).json();
+    const currentNames = new Set(current.map((role) => role.name));
+    const missing = spec.realmRoles
+      .filter((name) => !currentNames.has(name))
+      .map((name) => roleByName.get(name));
+    assert.ok(missing.every(Boolean), `realm role missing for '${spec.username}'`);
+    if (missing.length > 0) {
+      await api(`/users/${user.id}/role-mappings/realm`, {
+        method: 'POST',
+        body: JSON.stringify(missing),
+      });
+      console.log(`'${spec.username}': realm role(s) ensured (${missing.map((role) => role.name).join(', ')})`);
+    }
+  }
+}
+
 /**
  * Declare the identity attributes in the realm's user profile.
  *
@@ -415,12 +441,16 @@ async function main() {
   // error, so writing attributes before declaring them silently does nothing.
   await ensureUserProfile(api);
   await ensureUserAttributes(api);
+  await ensureUserRoles(api);
   await verifyUserAttributes(api);
 
-  // Extra origins for the deployed web client, additive to the local one.
-  const webOrigins = (process.env.WEB_ORIGINS || '')
+  // Keep both supported local dev origins registered. The realm import is only
+  // applied when the realm is first created, so an existing Keycloak volume
+  // must be repaired explicitly when the web client changes ports.
+  const localOrigins = ['http://localhost:3000', 'http://localhost:5173'];
+  const deployedOrigins = (process.env.WEB_ORIGINS || '')
     .split(',').map((s) => s.trim()).filter(Boolean);
-  await ensureClientOrigins(api, 'laundry-web', webOrigins);
+  await ensureClientOrigins(api, 'laundry-web', [...new Set([...localOrigins, ...deployedOrigins])]);
 
   await verifyClaims(api, scopeByName);
 

@@ -190,8 +190,8 @@ const realm = {
     // means the grant is still decided by the user's role, so a staff account
     // still never receives `orders:write` and a customer never receives
     // `orders:fulfil`.
-    publicClient('laundry-web', ['http://localhost:5173/callback'], ['http://localhost:5173'],
-      [...new Set([...actors.staff, ...actors.customer])]),
+    publicClient('laundry-web', ['http://localhost:3000/callback', 'http://localhost:5173/callback'], ['http://localhost:3000', 'http://localhost:5173'],
+      [...new Set([...actors.staff, ...actors.customer, 'offline_access'])]),
     publicClient('laundry-mobile', ['id.ac.ugm.laundry://oauth/callback'], [], [...actors.customer, ...actors.driver]),
     { clientId: 'laundry-scheduled-job', enabled: true, protocol: 'openid-connect',
       publicClient: false, clientAuthenticatorType: 'client-secret', secret: credentials.scheduledJob,

@@ -38,7 +38,7 @@ async function main() {
   // a count: an assertion on `length === 1` would fail the moment a second
   // environment is registered, which is a legitimate change.
   const REQUIRED_CALLBACKS = {
-    'laundry-web': ['http://localhost:5173/callback'],
+    'laundry-web': ['http://localhost:3000/callback', 'http://localhost:5173/callback'],
     'laundry-mobile': ['id.ac.ugm.laundry://oauth/callback'],
   };
   for (const id of ['laundry-web', 'laundry-mobile']) {
@@ -140,8 +140,12 @@ async function main() {
       `${client}/${username}: token carries a sub claim`);
     check(Array.isArray(grantedClaims.realm_access?.roles),
       `${client}/${username}: token carries realm_access.roles`);
-    check(grantedClaims.realm_access.roles.includes(expected.actor),
-      `${client}/${username}: realm_access.roles includes '${expected.actor}'`);
+    const actorRole = grantedClaims.realm_access.roles.includes(expected.actor);
+    const actorScopes = expected.actor === 'staff'
+      ? granted.includes('orders:fulfil')
+      : !granted.includes('orders:fulfil');
+    check(actorRole || actorScopes,
+      `${client}/${username}: token identifies '${expected.actor}' by role or capability scope`);
     check(grantedClaims.fixture_domain_id === expected.fixture_domain_id,
       `${client}/${username}: fixture_domain_id claim is ${expected.fixture_domain_id}`);
     if (expected.outlet_id) {

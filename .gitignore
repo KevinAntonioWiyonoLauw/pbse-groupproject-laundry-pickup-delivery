@@ -4,4 +4,5 @@ service/db/*.sqlite
 service/db/*.sqlite-*
 *.err
 .env
+.DS_Store
 auth/keycloak/.runtime/

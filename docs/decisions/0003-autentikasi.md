@@ -50,13 +50,13 @@ tenant, client ID, dan redirect URI produksi belum ditetapkan.
 
 ### 2. Klasifikasi seluruh client
 
-| Client | Tipe dan batas kepercayaan | Flow yang direncanakan | Client secret | Cakupan |
-|---|---|---|---|---|
-| Web dashboard staf | Public; JavaScript berjalan di browser pengguna | Authorization Code + PKCE S256 | Tidak | Registrasi public client pada tahap 3; UI pada pertemuan berikutnya |
-| Mobile customer/driver | Public; aplikasi terdistribusi dapat diperiksa pengguna | Authorization Code + PKCE S256 melalui system browser | Tidak, termasuk di bundle atau remote config | Registrasi public client pada tahap 3; UI pada pertemuan berikutnya |
-| Scheduled job | Confidential jika dijalankan pada server yang dikelola tim | Client Credentials, sebagai identitas mesin | Ya, hanya secret manager atau runtime config server | Rancangan P4; tugas bisnis dan grant API masih perlu ditetapkan |
-| Device scanner loket | Public secara default; provisioning saja tidak membuktikan secret aman | Usulan Device Authorization Grant jika tersedia pairing oleh staf | Tidak untuk rancangan public | Ditunda ke P11; tanpa pairing, desain identitas perangkat harus ditinjau ulang |
-| MCP assistant milik customer | Public jika berjalan lokal/terdistribusi; confidential hanya untuk komponen server yang benar-benar menjaga secret | Usulan Authorization Code + PKCE untuk delegasi customer; server confidential juga melakukan autentikasi client | Tidak pada agent lokal; hanya server dapat menyimpan secret | Ditunda ke P12; topologi dan dukungan provider perlu dipastikan |
+| Client                       | Tipe dan batas kepercayaan                                                                                         | Flow yang direncanakan                                                                                          | Client secret                                               | Cakupan                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Web dashboard staf           | Public; JavaScript berjalan di browser pengguna                                                                    | Authorization Code + PKCE S256                                                                                  | Tidak                                                       | Registrasi public client pada tahap 3; UI pada pertemuan berikutnya            |
+| Mobile customer/driver       | Public; aplikasi terdistribusi dapat diperiksa pengguna                                                            | Authorization Code + PKCE S256 melalui system browser                                                           | Tidak, termasuk di bundle atau remote config                | Registrasi public client pada tahap 3; UI pada pertemuan berikutnya            |
+| Scheduled job                | Confidential jika dijalankan pada server yang dikelola tim                                                         | Client Credentials, sebagai identitas mesin                                                                     | Ya, hanya secret manager atau runtime config server         | Rancangan P4; tugas bisnis dan grant API masih perlu ditetapkan                |
+| Device scanner loket         | Public secara default; provisioning saja tidak membuktikan secret aman                                             | Usulan Device Authorization Grant jika tersedia pairing oleh staf                                               | Tidak untuk rancangan public                                | Ditunda ke P11; tanpa pairing, desain identitas perangkat harus ditinjau ulang |
+| MCP assistant milik customer | Public jika berjalan lokal/terdistribusi; confidential hanya untuk komponen server yang benar-benar menjaga secret | Usulan Authorization Code + PKCE untuk delegasi customer; server confidential juga melakukan autentikasi client | Tidak pada agent lokal; hanya server dapat menyimpan secret | Ditunda ke P12; topologi dan dukungan provider perlu dipastikan                |
 
 Scheduled job tidak mewakili customer. MCP yang bertindak atas nama customer
 tidak boleh mengganti delegasi pengguna dengan Client Credentials. Device dan
@@ -79,11 +79,17 @@ Keputusan rancangan untuk web/mobile:
 5. Tukarkan authorization code dengan verifier tanpa client secret. Password
    grant dan implicit flow tidak digunakan. Hapus data transaksi setelah selesai.
 
-| Client | Kebijakan penyimpanan yang direncanakan |
-|---|---|
-| Web | Access/refresh token hanya di memori melalui SDK; tidak di localStorage, sessionStorage, URL, atau cookie yang bisa dibaca JavaScript. Reload dapat memerlukan login kembali. Memori tetap perlu dilindungi dari XSS. |
-| Mobile | Access token di memori; refresh token di protected storage OS, misalnya Keychain atau penyimpanan terenkripsi dengan kunci di Android Keystore. Bukan plaintext preferences atau database antrean offline. |
-| Scheduled job | Secret diinjeksi saat runtime di server; access token di memori. Minta token baru dengan Client Credentials saat kedaluwarsa, tanpa refresh token pengguna. |
+| Client        | Kebijakan penyimpanan yang direncanakan                                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web           | Access/refresh token hanya di memori melalui SDK; tidak di localStorage, sessionStorage, URL, atau cookie yang bisa dibaca JavaScript. Reload dapat memerlukan login kembali. Memori tetap perlu dilindungi dari XSS. |
+| Mobile        | Access token di memori; refresh token di protected storage OS, misalnya Keychain atau penyimpanan terenkripsi dengan kunci di Android Keystore. Bukan plaintext preferences atau database antrean offline.            |
+| Scheduled job | Secret diinjeksi saat runtime di server; access token di memori. Minta token baru dengan Client Credentials saat kedaluwarsa, tanpa refresh token pengguna.                                                           |
+
+> **Revisi P5:** Untuk dashboard web, keputusan memori-only di baris Web tidak
+> lagi memenuhi acceptance tab baru dan provider lintas situs. P5 memakai
+> `localStorage` dengan koordinasi refresh lintas tab seperti dijelaskan pada
+> [ADR 0004 - Penyimpanan Sesi Web P5](0004-penyimpanan-sesi-web.md). Kebijakan
+> mobile dan scheduled job di ADR ini tidak berubah.
 
 Refresh token hanya dikirim ke token endpoint authorization server. Access token
 dikirim ke API melalui header `Authorization`. Token dan header sensitif tidak
@@ -97,13 +103,13 @@ valid dipasang saat pengiriman, dengan identitas pengguna antrean tetap diperiks
 Tabel ini merupakan input tahap 2 untuk Faris, **belum vocabulary final atau grant
 yang aktif**. Scope mengikuti capability resource, bukan satu scope per endpoint.
 
-| Scope usulan | Capability | Pemegang yang direncanakan | Dasar kontrak/domain |
-|---|---|---|---|
-| `orders:read` | Membaca collection/detail order yang diizinkan | Customer untuk miliknya; staf untuk outletnya | `listOrders`, `getOrder` |
-| `orders:write` | Membuat dan membatalkan order sendiri sesuai state bisnis | Customer | `createOrder`, `cancelOrder` |
-| `pickups:read` | Membaca pickup dalam kewenangan caller | Driver untuk penugasannya; staf untuk outletnya | `listPickups`, belum diimplementasikan di service |
-| `orders:fulfil` | Mengelola pemrosesan order | Staf dalam outletnya | Domain saja; operasi belum ada di kontrak |
-| `pickups:write` | Memperbarui status pickup yang ditugaskan | Driver | Domain saja; operasi belum ada di kontrak |
+| Scope usulan    | Capability                                                | Pemegang yang direncanakan                      | Dasar kontrak/domain                              |
+| --------------- | --------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------- |
+| `orders:read`   | Membaca collection/detail order yang diizinkan            | Customer untuk miliknya; staf untuk outletnya   | `listOrders`, `getOrder`                          |
+| `orders:write`  | Membuat dan membatalkan order sendiri sesuai state bisnis | Customer                                        | `createOrder`, `cancelOrder`                      |
+| `pickups:read`  | Membaca pickup dalam kewenangan caller                    | Driver untuk penugasannya; staf untuk outletnya | `listPickups`, belum diimplementasikan di service |
+| `orders:fulfil` | Mengelola pemrosesan order                                | Staf dalam outletnya                            | Domain saja; operasi belum ada di kontrak         |
+| `pickups:write` | Memperbarui status pickup yang ditugaskan                 | Driver                                          | Domain saja; operasi belum ada di kontrak         |
 
 Web staf hanya meminta capability staf yang telah tersedia. Mobile customer
 meminta `orders:read orders:write`; mobile driver meminta capability pickup yang
@@ -129,11 +135,11 @@ jangan mengklaim endpoint atau fixture tersebut sudah tersedia.
 
 ### 5. Perilaku client terhadap penolakan akses
 
-| Status yang ditargetkan | Respons client |
-|---|---|
-| `401` | Bila sesi memiliki refresh token, coba satu refresh terkoordinasi lalu satu retry. Jika gagal, hapus sesi dan minta login; jangan membuat loop retry. |
-| `403` | Tampilkan keterbatasan izin; tidak mencoba refresh/retry berulang untuk menaikkan scope. |
-| `404` | Tampilkan pesan generik object tidak tersedia, baik tidak ada maupun bukan milik caller; jangan menebak keberadaan object. |
+| Status yang ditargetkan | Respons client                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `401`                   | Bila sesi memiliki refresh token, coba satu refresh terkoordinasi lalu satu retry. Jika gagal, hapus sesi dan minta login; jangan membuat loop retry. |
+| `403`                   | Tampilkan keterbatasan izin; tidak mencoba refresh/retry berulang untuk menaikkan scope.                                                              |
+| `404`                   | Tampilkan pesan generik object tidak tersedia, baik tidak ada maupun bukan milik caller; jangan menebak keberadaan object.                            |
 
 Retry mutation tetap memakai body dan Idempotency-Key semula. Ini kebijakan P4
 yang akan ditinjau terhadap kontrak final, bukan hasil pengujian service saat ini.
@@ -169,11 +175,11 @@ deteksi. Lihat [Configure Refresh Token Rotation](https://auth0.com/docs/secure/
 
 Bukti tahap 10, diulang untuk web dan mobile dengan sesi uji terpisah:
 
-| Langkah | Hasil yang harus dibuktikan | Hasil aktual tahap 10 |
-|---|---|---|
+| Langkah                              | Hasil yang harus dibuktikan                                                         | Hasil aktual tahap 10                                         |
+| ------------------------------------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Login lalu gunakan RT1 untuk refresh | Sukses dan menerima RT2; perbandingan dalam memori menunjukkan RT2 berbeda dari RT1 | Lulus pada Keycloak lokal, web dan mobile (17 September 2026) |
-| Gunakan RT1 kembali | Ditolak dan reuse terdeteksi | Lulus: `invalid_grant`, web dan mobile |
-| Gunakan RT2 setelah reuse RT1 | Ditolak karena seluruh refresh-token family dicabut | Lulus: `invalid_grant`, web dan mobile |
+| Gunakan RT1 kembali                  | Ditolak dan reuse terdeteksi                                                        | Lulus: `invalid_grant`, web dan mobile                        |
+| Gunakan RT2 setelah reuse RT1        | Ditolak karena seluruh refresh-token family dicabut                                 | Lulus: `invalid_grant`, web dan mobile                        |
 
 Catatan bukti memuat waktu UTC, jenis client, setting provider yang telah
 disanitasi, status/error aktual, event reuse yang relevan, dan hasil perbandingan
@@ -187,13 +193,13 @@ langsung tidak berlaku; masa berlaku pendek membatasi sisa masa penggunaannya.
 
 ## Alternatives Considered
 
-| Alternatif | Pertimbangan |
-|---|---|
-| Keycloak lokal | Kandidat bila tim memerlukan kontrol konfigurasi lokal; perlu pengelolaan instance dan verifikasi perilaku family revocation pada versi/setting yang dipilih. |
-| Membuat authorization server sendiri | Memperluas pekerjaan ke pengelolaan kredensial, issuance, rotation, dan reuse; tidak dipilih untuk penambahan auth P4. |
-| Menyimpan secret pada web/mobile | Tidak memenuhi batas kepercayaan public client; secret yang didistribusikan bukan rahasia server. |
-| Client Credentials untuk semua client | Tidak membawa delegasi pengguna untuk pembatasan object customer/driver. |
-| Web memakai backend-for-frontend | Dapat memindahkan penyimpanan token ke server, tetapi menambah komponen; rancangan awal tetap public SPA sesuai klasifikasi P4. |
+| Alternatif                            | Pertimbangan                                                                                                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Keycloak lokal                        | Kandidat bila tim memerlukan kontrol konfigurasi lokal; perlu pengelolaan instance dan verifikasi perilaku family revocation pada versi/setting yang dipilih. |
+| Membuat authorization server sendiri  | Memperluas pekerjaan ke pengelolaan kredensial, issuance, rotation, dan reuse; tidak dipilih untuk penambahan auth P4.                                        |
+| Menyimpan secret pada web/mobile      | Tidak memenuhi batas kepercayaan public client; secret yang didistribusikan bukan rahasia server.                                                             |
+| Client Credentials untuk semua client | Tidak membawa delegasi pengguna untuk pembatasan object customer/driver.                                                                                      |
+| Web memakai backend-for-frontend      | Dapat memindahkan penyimpanan token ke server, tetapi menambah komponen; rancangan awal tetap public SPA sesuai klasifikasi P4.                               |
 
 ## Consequences
 
@@ -212,12 +218,12 @@ langsung tidak berlaku; masa berlaku pendek membatasi sisa masa penggunaannya.
 
 ### Handoff setelah tahap 1
 
-| Pemilik | Bahan tindak lanjut saat tahap terkait dimulai |
-|---|---|
-| Aya | Review klasifikasi, callback final, storage, dan least-privilege scope; koordinasi bukti provider dengan Tori. |
-| Faris | Finalisasi scope dan pemetaan operasi pada tahap 2, lalu kontrak pada tahap 4. |
-| Kevin | Review provider dan pemetaan identitas/object; konfigurasi serta backend pada tahap terkait. |
-| Tori | Review fixture token/JWKS dan kriteria bukti; implementasi test pada tahap terkait. |
+| Pemilik | Bahan tindak lanjut saat tahap terkait dimulai                                                                 |
+| ------- | -------------------------------------------------------------------------------------------------------------- |
+| Aya     | Review klasifikasi, callback final, storage, dan least-privilege scope; koordinasi bukti provider dengan Tori. |
+| Faris   | Finalisasi scope dan pemetaan operasi pada tahap 2, lalu kontrak pada tahap 4.                                 |
+| Kevin   | Review provider dan pemetaan identitas/object; konfigurasi serta backend pada tahap terkait.                   |
+| Tori    | Review fixture token/JWKS dan kriteria bukti; implementasi test pada tahap terkait.                            |
 
 ## Pembaruan Tahap 8–12 (Service Owner)
 
@@ -230,14 +236,14 @@ maupun mutation pickup") setelah implementasi backend selesai. Status: kontrak
 
 Klaim provider yang dipakai:
 
-| Claim | Dipakai sebagai | Catatan |
-|---|---|---|
-| `sub` | `principal.subject` | identitas token |
-| `fixture_domain_id` | `principal.domainId` | identitas domain (`cus_*`, `drv_*`, `outlet_*`); fallback ke `sub` |
-| `outlet_id` | `principal.outletId` | hanya untuk staf; berasal dari provider, **tidak** dari request |
-| `realm_access.roles` | `principal.roles` | `customer` / `driver` / `staff` |
-| `scope` | `principal.scopes` | daftar capability |
-| `jti` | `principal.tokenId` | bila tersedia |
+| Claim                | Dipakai sebagai      | Catatan                                                            |
+| -------------------- | -------------------- | ------------------------------------------------------------------ |
+| `sub`                | `principal.subject`  | identitas token                                                    |
+| `fixture_domain_id`  | `principal.domainId` | identitas domain (`cus_*`, `drv_*`, `outlet_*`); fallback ke `sub` |
+| `outlet_id`          | `principal.outletId` | hanya untuk staf; berasal dari provider, **tidak** dari request    |
+| `realm_access.roles` | `principal.roles`    | `customer` / `driver` / `staff`                                    |
+| `scope`              | `principal.scopes`   | daftar capability                                                  |
+| `jti`                | `principal.tokenId`  | bila tersedia                                                      |
 
 `customerId` dari body atau URL **tidak pernah** diperlakukan sebagai bukti
 kepemilikan.
@@ -247,11 +253,11 @@ menerbitkan user attribute pada token tanpa `oidc-usermodel-attribute-mapper`.
 Tiga client scope wajib terpasang sebagai default pada public client
 (`auth/keycloak/prepare.mjs`):
 
-| Client scope | Claim | Peran |
-|---|---|---|
-| `basic` | `sub` | tanpa ini `principal.js` melempar error dan **semua** token asli dijawab `401` |
-| `roles` | `realm_access.roles` | `kind` caller dan fallback outlet staf |
-| `laundry-identity` | `fixture_domain_id`, `outlet_id` | `domainId` dan `outletId` |
+| Client scope       | Claim                            | Peran                                                                          |
+| ------------------ | -------------------------------- | ------------------------------------------------------------------------------ |
+| `basic`            | `sub`                            | tanpa ini `principal.js` melempar error dan **semua** token asli dijawab `401` |
+| `roles`            | `realm_access.roles`             | `kind` caller dan fallback outlet staf                                         |
+| `laundry-identity` | `fixture_domain_id`, `outlet_id` | `domainId` dan `outletId`                                                      |
 
 `basic` dan `roles` adalah client scope bawaan Keycloak yang **hilang** bila
 `clientScopes` dideklarasikan di file import realm, karena deklarasi itu
@@ -276,11 +282,11 @@ hanya dapat dijangkau oleh outlet yang memegangnya.
 
 ### 8.3 Operasi yang sebelumnya tidak ada di kontrak
 
-| Operasi | Scope | Actor | Menggantikan contoh materi |
-|---|---|---|---|
-| `POST /v1/orders/{orderId}/fulfilment` | `orders:fulfil` | Staff | `POST /v1/orders/{orderId}/accept` |
-| `POST /v1/pickups` | `orders:fulfil` | Staff | — (menugaskan driver) |
-| `POST /v1/pickups/{pickupId}/collect` | `pickups:write` | Driver | `PATCH /v1/deliveries/{id}/collect` |
+| Operasi                                | Scope           | Actor  | Menggantikan contoh materi          |
+| -------------------------------------- | --------------- | ------ | ----------------------------------- |
+| `POST /v1/orders/{orderId}/fulfilment` | `orders:fulfil` | Staff  | `POST /v1/orders/{orderId}/accept`  |
+| `POST /v1/pickups`                     | `orders:fulfil` | Staff  | — (menugaskan driver)               |
+| `POST /v1/pickups/{pickupId}/collect`  | `pickups:write` | Driver | `PATCH /v1/deliveries/{id}/collect` |
 
 Resource kelompok ini adalah **Pickup** (bukan Delivery), sehingga padanan
 `collect` memakai resource Pickup. Konsekuensinya `pickups:write` dan
@@ -289,14 +295,14 @@ operasi nyata, sehingga jumlah scope (5) tetap jauh di bawah jumlah operasi (9).
 
 ### 8.4 Aturan kepemilikan final
 
-| Objek | Aturan |
-|---|---|
-| Order (read) | customer pemilik **atau** staff outlet yang memegang order **atau** driver yang ditugaskan pada pickup order tersebut |
-| Order (cancel) | hanya customer pemilik, dan hanya pada status `pending_pickup`/`ready_for_pickup`/`confirmed` |
-| Order (fulfil / claim) | staff, hanya bila order belum terikat outlet **atau** sudah terikat outletnya sendiri |
-| Pickup (dispatch) | staff, dengan aturan order yang sama seperti fulfil |
-| Pickup (collect) | hanya `driver_id` yang tercatat pada pickup tersebut |
-| Koleksi | dibatasi di dalam query SQL: customer `WHERE customer_id`, staff `WHERE outlet_id`, driver `WHERE driver_id` |
+| Objek                  | Aturan                                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Order (read)           | customer pemilik **atau** staff outlet yang memegang order **atau** driver yang ditugaskan pada pickup order tersebut |
+| Order (cancel)         | hanya customer pemilik, dan hanya pada status `pending_pickup`/`ready_for_pickup`/`confirmed`                         |
+| Order (fulfil / claim) | staff, hanya bila order belum terikat outlet **atau** sudah terikat outletnya sendiri                                 |
+| Pickup (dispatch)      | staff, dengan aturan order yang sama seperti fulfil                                                                   |
+| Pickup (collect)       | hanya `driver_id` yang tercatat pada pickup tersebut                                                                  |
+| Koleksi                | dibatasi di dalam query SQL: customer `WHERE customer_id`, staff `WHERE outlet_id`, driver `WHERE driver_id`          |
 
 ### 8.5 Strategi test token — realisasi
 
@@ -308,28 +314,28 @@ issuer, audience, expiry) — **tidak ada bypass autentikasi untuk test**.
 
 Fixture 6 principal dengan relasi object eksplisit:
 
-| Principal | domainId | outletId | scope |
-|---|---|---|---|
-| `student-a` | `cus_studentA` | — | `orders:read orders:write` |
-| `student-b` | `cus_studentB` | — | `orders:read orders:write` |
-| `courier-a` | `drv_courierA` | — | `pickups:read pickups:write` |
-| `courier-b` | `drv_courierB` | — | `pickups:read pickups:write` |
-| `staff-outlet-a` | `outlet_a` | `outlet_a` | `orders:read pickups:read orders:fulfil` |
-| `staff-outlet-b` | `outlet_b` | `outlet_b` | `orders:read pickups:read orders:fulfil` |
+| Principal        | domainId       | outletId   | scope                                    |
+| ---------------- | -------------- | ---------- | ---------------------------------------- |
+| `student-a`      | `cus_studentA` | —          | `orders:read orders:write`               |
+| `student-b`      | `cus_studentB` | —          | `orders:read orders:write`               |
+| `courier-a`      | `drv_courierA` | —          | `pickups:read pickups:write`             |
+| `courier-b`      | `drv_courierB` | —          | `pickups:read pickups:write`             |
+| `staff-outlet-a` | `outlet_a`     | `outlet_a` | `orders:read pickups:read orders:fulfil` |
+| `staff-outlet-b` | `outlet_b`     | `outlet_b` | `orders:read pickups:read orders:fulfil` |
 
 ### 8.6 Bukti empiris (bukan rencana)
 
-| Klaim | Bukti |
-|---|---|
-| Empat negative test lulus, masing-masing boundary berbeda | `node tests/authz/test-authz.js` → `Authz tests passed` (40 pemeriksaan) |
-| Test benar-benar menguji pemeriksaannya | `node tests/authz/verify-checks-are-live.js` → keempat boundary MERAH saat pemeriksaannya dinetralkan |
-| `401` tanpa token / token diubah / expired / issuer-audience salah | `tests/authz/test-authz.js` |
-| Absent vs not-owned identik (status + body) | pemeriksaan `deepEqual` body pada test 1, 2, dan 4 |
-| Unauthorized write tidak mengubah database | test 2 membaca `status`/`collected_at` sebelum dan sesudah |
-| Collection dibatasi di query | test 4 & test 2 membandingkan daftar milik outlet/driver sendiri |
-| Contract test P3 tetap lulus | `node tests/contract/run-against-service.js` → 33/33 |
-| Tidak ada token di log | pemeriksaan otomatis atas output service |
-| `openapi.yaml` lint lulus | `npx @redocly/cli lint openapi.yaml` → valid, 0 error |
+| Klaim                                                              | Bukti                                                                                                 |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Empat negative test lulus, masing-masing boundary berbeda          | `node tests/authz/test-authz.js` → `Authz tests passed` (40 pemeriksaan)                              |
+| Test benar-benar menguji pemeriksaannya                            | `node tests/authz/verify-checks-are-live.js` → keempat boundary MERAH saat pemeriksaannya dinetralkan |
+| `401` tanpa token / token diubah / expired / issuer-audience salah | `tests/authz/test-authz.js`                                                                           |
+| Absent vs not-owned identik (status + body)                        | pemeriksaan `deepEqual` body pada test 1, 2, dan 4                                                    |
+| Unauthorized write tidak mengubah database                         | test 2 membaca `status`/`collected_at` sebelum dan sesudah                                            |
+| Collection dibatasi di query                                       | test 4 & test 2 membandingkan daftar milik outlet/driver sendiri                                      |
+| Contract test P3 tetap lulus                                       | `node tests/contract/run-against-service.js` → 33/33                                                  |
+| Tidak ada token di log                                             | pemeriksaan otomatis atas output service                                                              |
+| `openapi.yaml` lint lulus                                          | `npx @redocly/cli lint openapi.yaml` → valid, 0 error                                                 |
 
 Rincian perintah dan keluaran ada di `service/EVIDENCE.md`.
 
@@ -348,11 +354,11 @@ Rincian perintah dan keluaran ada di `service/EVIDENCE.md`.
 
 Tiga gap yang tersisa setelah §8.6 ditutup:
 
-| Gap | Penyelesaian |
-|---|---|
-| `POST /orders/{orderId}/fulfilment` sudah diimplementasikan dan dipakai negative test 3, tetapi belum dinyatakan di `openapi.yaml` | Operasi `fulfilOrder` ditambahkan ke kontrak dengan scope `orders:fulfil` dan response `400/401/403/404/500/502/503/504`. Versi kontrak naik `1.1.0` → `1.2.0` (perubahan kompatibel). Tidak ada lagi operasi protected yang berjalan tanpa deklarasi `security`. |
+| Gap                                                                                                                                                | Penyelesaian                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /orders/{orderId}/fulfilment` sudah diimplementasikan dan dipakai negative test 3, tetapi belum dinyatakan di `openapi.yaml`                 | Operasi `fulfilOrder` ditambahkan ke kontrak dengan scope `orders:fulfil` dan response `400/401/403/404/500/502/503/504`. Versi kontrak naik `1.1.0` → `1.2.0` (perubahan kompatibel). Tidak ada lagi operasi protected yang berjalan tanpa deklarasi `security`. |
 | `principal.js` bergantung pada claim `fixture_domain_id` dan `outlet_id`, tetapi Keycloak tidak menerbitkan user attribute pada token tanpa mapper | Client scope `laundry-identity` ditambahkan pada `auth/keycloak/prepare.mjs` dengan dua `oidc-usermodel-attribute-mapper`, masuk `defaultClientScopes` kedua public client. `auth/keycloak/verify.mjs` meng-assert nilai kedua claim pada token hasil login PKCE. |
-| Claim `sub` dan `realm_access` tidak pernah diterbitkan, sehingga setiap token asli ditolak `401` | Client scope bawaan `basic` (`oidc-sub-mapper`) dan `roles` (`oidc-usermodel-realm-role-mapper`, `oidc-usermodel-client-role-mapper`) dideklarasikan ulang dan dipasang sebagai default pada kedua public client. |
+| Claim `sub` dan `realm_access` tidak pernah diterbitkan, sehingga setiap token asli ditolak `401`                                                  | Client scope bawaan `basic` (`oidc-sub-mapper`) dan `roles` (`oidc-usermodel-realm-role-mapper`, `oidc-usermodel-client-role-mapper`) dideklarasikan ulang dan dipasang sebagai default pada kedua public client.                                                 |
 
 **Temuan paling penting — client scope bawaan hilang.** Mendeklarasikan
 `clientScopes` di file import realm **menggantikan** himpunan client scope bawaan
@@ -385,18 +391,18 @@ Realm `laundry` sudah dibuat pada Keycloak yang di-deploy
 `verify-deployment.mjs` membuktikan resource server
 (`https://pbse.kevinio.my.id`) menerima token asli:
 
-| Pemeriksaan | Hasil |
-|---|---|
-| Token memuat `sub`, `realm_access.roles`, `fixture_domain_id`, `outlet_id`, `aud` | Lulus |
-| Tanpa token | `401` |
-| Token asli diterima | `200` |
-| Scope kurang | `403` |
-| Scope ditolak sebelum object di-load | `403` |
-| Object milik caller lain | `404` |
-| Body `404` absent vs not-owned identik | Lulus |
-| `createOrder` dengan identitas domain dari claim | `201` |
-| Outlet binding dari token | `outlet_a` |
-| Refresh rotation + family revocation (web & mobile) | Lulus |
+| Pemeriksaan                                                                       | Hasil      |
+| --------------------------------------------------------------------------------- | ---------- |
+| Token memuat `sub`, `realm_access.roles`, `fixture_domain_id`, `outlet_id`, `aud` | Lulus      |
+| Tanpa token                                                                       | `401`      |
+| Token asli diterima                                                               | `200`      |
+| Scope kurang                                                                      | `403`      |
+| Scope ditolak sebelum object di-load                                              | `403`      |
+| Object milik caller lain                                                          | `404`      |
+| Body `404` absent vs not-owned identik                                            | Lulus      |
+| `createOrder` dengan identitas domain dari claim                                  | `201`      |
+| Outlet binding dari token                                                         | `outlet_a` |
+| Refresh rotation + family revocation (web & mobile)                               | Lulus      |
 
 Provider dan resource server berada pada project Railway yang berbeda, sehingga
 `OIDC_JWKS_URI` memakai domain publik. Host `*.railway.internal` tidak resolve

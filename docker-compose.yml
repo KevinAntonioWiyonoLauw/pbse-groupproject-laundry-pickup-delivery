@@ -10,9 +10,11 @@ services:
       DATABASE_FILE: ./db/laundry.sqlite
       NODE_ENV: production
       OIDC_ISSUER: ${OIDC_ISSUER:?OIDC_ISSUER is required}
-      OIDC_JWKS_URI: ${OIDC_JWKS_URI:?OIDC_JWKS_URI is required}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI:-http://host.docker.internal:8081/realms/laundry/protocol/openid-connect/certs}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:?OIDC_AUDIENCE is required}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - laundry_data:/app/service/db
     healthcheck:
