@@ -1,6 +1,7 @@
 <div align="center">
 
 # 🧺 Laundry Pickup & Delivery
+
 **Platform Pemesanan dan Penjemputan Laundry**
 
 <p align="center">
@@ -23,12 +24,12 @@ Program Studi Ilmu Komputer, Departemen Ilmu Komputer dan Elektronika, FMIPA UGM
 
 ### 👥 Kelompok
 
-| Nama Anggota | NIM|
-| :--- | :--- |
-| Ayasha Rahmadinni (Aya)| 24/545462/PA/23178 |
-| Farsya Nabila Tori (Tori)| 24/543855/PA/23113 |
+| Nama Anggota                      | NIM                |
+| :-------------------------------- | :----------------- |
+| Ayasha Rahmadinni (Aya)           | 24/545462/PA/23178 |
+| Farsya Nabila Tori (Tori)         | 24/543855/PA/23113 |
 | Kevin Antonio Wiyono Lauw (Kevin) | 24/535917/PA/22736 |
-| Maulana Faris Al Ghifari (Faris)| 24/544029/PA/23119 |
+| Maulana Faris Al Ghifari (Faris)  | 24/544029/PA/23119 |
 
 ---
 
@@ -48,19 +49,19 @@ ulang service-nya.
 Peran berotasi setiap 3 pertemuan; seorang anggota tidak boleh memegang
 peran yang sama dua periode berturut-turut.
 
-| Peran | Tanggung Jawab | 
-| :--- | :--- | 
-| **Contract Owner** | Pemegang tanggung jawab atas `openapi.yaml`; setiap perubahan antarmuka ditinjau oleh peran ini |
-| **Service Owner** | Backend yang di-deploy, konfigurasi, migrasi, health endpoint (mulai Pertemuan 3) | 
-| **Client Owner** | Klien yang dihadapi pengguna; pelaporan tertulis atas ambiguitas dalam kontrak |
-| **Integration Owner** | Mock server, contract test, koordinasi dengan kelompok mitra (Pertemuan 7) |
+| Peran                 | Tanggung Jawab                                                                                  |
+| :-------------------- | :---------------------------------------------------------------------------------------------- |
+| **Contract Owner**    | Pemegang tanggung jawab atas `openapi.yaml`; setiap perubahan antarmuka ditinjau oleh peran ini |
+| **Service Owner**     | Backend yang di-deploy, konfigurasi, migrasi, health endpoint (mulai Pertemuan 3)               |
+| **Client Owner**      | Klien yang dihadapi pengguna; pelaporan tertulis atas ambiguitas dalam kontrak                  |
+| **Integration Owner** | Mock server, contract test, koordinasi dengan kelompok mitra (Pertemuan 7)                      |
 
-| Nama | Pertemuan 1–3 | Pertemuan 4–6 |
-| :--- | :--- | :--- |
-| Aya | Service Owner | Client Owner |
-| Tori | Client Owner | Integration Owner |
-| Kevin | Contract Owner | Service Owner |
-| Faris | Integration Owner | Contract Owner |
+| Nama  | Pertemuan 1–3     | Pertemuan 4–6     |
+| :---- | :---------------- | :---------------- |
+| Aya   | Service Owner     | Client Owner      |
+| Tori  | Client Owner      | Integration Owner |
+| Kevin | Contract Owner    | Service Owner     |
+| Faris | Integration Owner | Contract Owner    |
 
 Keputusan awal autentikasi tahap 1 dicatat di
 [`docs/decisions/0003-autentikasi.md`](docs/decisions/0003-autentikasi.md).
@@ -94,11 +95,11 @@ pending_pickup -> ready_for_pickup -> confirmed -> assigned -> picked_up -> proc
 
 ### Tiga Aktor Utama
 
-| Aktor | Hak Akses Utama |
-| :--- | :--- |
-| **Customer** | Buat order, lihat order sendiri, batalkan sebelum `assigned` |
+| Aktor             | Hak Akses Utama                                                  |
+| :---------------- | :--------------------------------------------------------------- |
+| **Customer**      | Buat order, lihat order sendiri, batalkan sebelum `assigned`     |
 | **Staff Laundry** | Lihat semua order, tandai siap dijemput, kelola pencarian driver |
-| **Driver** | Lihat & update status pickup miliknya sendiri |
+| **Driver**        | Lihat & update status pickup miliknya sendiri                    |
 
 📄 Dokumentasi lengkap:
 [`docs/domain.md`](docs/domain.md) ·
@@ -111,7 +112,7 @@ pending_pickup -> ready_for_pickup -> confirmed -> assigned -> picked_up -> proc
 
 ```text
 laundry-pickup-delivery/
-├── openapi.yaml              # 📄 Kontrak API 
+├── openapi.yaml              # 📄 Kontrak API
 ├── CHANGELOG.md               # Catatan perubahan kontrak
 ├── docs/
 │   ├── domain.md               # Deskripsi domain & pemeriksaan 4 syarat
@@ -123,7 +124,7 @@ laundry-pickup-delivery/
 ├── auth/keycloak/             # Authorization server (P4)
 ├── service/                   # Backend (P3, auth P4, CORS & conditional request P5)
 ├── clients/
-│   ├── web/                    # Dashboard admin (P5)
+│   ├── web/                    # Dashboard browser customer & staff (P5)
 │   ├── mobile/                 # App customer & driver (P6)
 │   ├── device/                 # Scanner loket (P11)
 │   └── mcp/                    # Assistant agent (P12)
@@ -139,11 +140,11 @@ laundry-pickup-delivery/
 
 Tiga hal yang dibutuhkan browser client dan tidak ada sebelum P5:
 
-| Kebutuhan | Perilaku |
-|---|---|
-| **CORS** | Origin diizinkan dibaca dari `CORS_ALLOWED_ORIGINS` (daftar eksplisit, dipisah koma). Origin yang tidak terdaftar tidak pernah di-reflect. `Vary: Origin` selalu dikirim. Preflight `OPTIONS` dijawab `204` sebelum authentication, karena preflight tidak membawa `Authorization`. |
-| **Conditional read** | `GET` pada entitas dan koleksi mengembalikan `ETag` strong. Kirim kembali sebagai `If-None-Match`; bila tidak ada perubahan jawabannya `304` tanpa body. |
-| **Conditional write** | Kirim `If-Match` berisi ETag yang terakhir dilihat. Bila entitas sudah berubah, jawabannya `412` dengan problem type `precondition-failed` — bukan `200` yang menimpa perubahan orang lain. |
+| Kebutuhan             | Perilaku                                                                                                                                                                                                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CORS**              | Origin diizinkan dibaca dari `CORS_ALLOWED_ORIGINS` (daftar eksplisit, dipisah koma). Origin yang tidak terdaftar tidak pernah di-reflect. `Vary: Origin` selalu dikirim. Preflight `OPTIONS` dijawab `204` sebelum authentication, karena preflight tidak membawa `Authorization`. |
+| **Conditional read**  | `GET` pada entitas dan koleksi mengembalikan `ETag` strong. Kirim kembali sebagai `If-None-Match`; bila tidak ada perubahan jawabannya `304` tanpa body.                                                                                                                            |
+| **Conditional write** | Kirim `If-Match` berisi ETag yang terakhir dilihat. Bila entitas sudah berubah, jawabannya `412` dengan problem type `precondition-failed` — bukan `200` yang menimpa perubahan orang lain.                                                                                         |
 
 `If-Match` bersifat opsional dan tetap dihormati bila dikirim, sehingga client
 yang ditulis terhadap kontrak `1.2.0` tidak perlu berubah.
@@ -155,10 +156,10 @@ keduanya memicu preflight.
 
 ### Visibilitas koleksi
 
-| Principal | `GET /v1/orders` mengembalikan |
-|---|---|
-| Customer | Hanya order dengan `customerId` miliknya |
-| Staff | Order yang terikat outletnya **dan** order yang belum terikat outlet mana pun (antrean masuk) |
+| Principal | `GET /v1/orders` mengembalikan                                                                |
+| --------- | --------------------------------------------------------------------------------------------- |
+| Customer  | Hanya order dengan `customerId` miliknya                                                      |
+| Staff     | Order yang terikat outletnya **dan** order yang belum terikat outlet mana pun (antrean masuk) |
 
 Order yang terikat outlet lain tidak dikembalikan, dan membaca order itu
 langsung lewat identifier menghasilkan `404` yang identik dengan order yang
@@ -174,6 +175,17 @@ Prasyarat: Docker Desktop aktif dan Node.js >= 20.
 node auth/keycloak/prepare.mjs
 docker compose --env-file auth/keycloak/.runtime/.env -f docker-compose.auth.yml up -d
 node auth/keycloak/verify.mjs
+```
+
+Untuk menjalankan service container terhadap Keycloak lokal, issuer tetap
+menggunakan `localhost` agar cocok dengan claim token, sedangkan JWKS memakai
+`host.docker.internal` agar dapat dijangkau dari dalam container:
+
+```bash
+OIDC_ISSUER=http://localhost:8081/realms/laundry \
+OIDC_AUDIENCE=laundry-api \
+CORS_ALLOWED_ORIGINS=http://localhost:3000 \
+docker compose up -d
 ```
 
 `prepare.mjs` membuat password admin dan password enam user uji secara acak,
@@ -206,7 +218,7 @@ Admin credential diambil dari environment (`KC_ADMIN_PASSWORD`) bila ada, jika
 tidak dari `.runtime/credentials.json`.
 
 > **Kenapa langkah deklarasi attribute penting.** Keycloak 24+ memvalidasi user
-> terhadap *declarative user profile*. Attribute yang tidak dideklarasikan di
+> terhadap _declarative user profile_. Attribute yang tidak dideklarasikan di
 > sana **dibuang tanpa error**: admin API menjawab `204 No Content` dan nilainya
 > tidak pernah muncul pada user. Akibatnya `principal.js` jatuh ke fallback
 > `sub`, setiap perbandingan kepemilikan menjadi UUID Keycloak melawan
@@ -285,28 +297,77 @@ Dokumentasi terkait:
 Setiap workflow adalah sesuatu yang **diselesaikan seseorang**, bukan daftar
 layar. Setiap baris menyebut operasi yang benar-benar ada di `openapi.yaml`.
 
-| Workflow | Screen | Role permitted | Operation in `openapi.yaml` | Call/screen |
-|---|---|---|---|---|
-| **W1 — Staff menerima order masuk** | Daftar order masuk `/orders?status=pending_pickup` | staff | `GET /v1/orders?status=pending_pickup` | 1 |
-| | Detail order `/orders/{orderId}` | staff | `GET /v1/orders/{orderId}` | 1 |
-| | Aksi Terima | staff | `POST /v1/orders/{orderId}/fulfilment` | 1 |
-| **W2 — Staff menugaskan driver** | Panel penugasan `/orders/{orderId}/assign` | staff | `GET /v1/orders/{orderId}` + `POST /v1/pickups` | 2 |
-| **W3 — Staff memantau pickup** | Daftar pickup `/pickups` (polled) | staff | `GET /v1/pickups` | 1 |
-| **W4 — Customer membuat order** | Form order baru `/orders/new` | customer | `POST /v1/orders` | 1 |
-| | Order saya `/orders` | customer | `GET /v1/orders` | 1 |
-| **W5 — Customer membatalkan order** | Detail order `/orders/{orderId}` | customer | `GET /v1/orders/{orderId}` | 1 |
-| | Konfirmasi pembatalan | customer | `POST /v1/orders/{orderId}/cancellation` | 1 |
+| Workflow                            | Screen                                             | Role permitted | Operation in `openapi.yaml`                     | Call/screen |
+| ----------------------------------- | -------------------------------------------------- | -------------- | ----------------------------------------------- | ----------- |
+| **W1 — Staff menerima order masuk** | Daftar order masuk `/orders?status=pending_pickup` | staff          | `GET /v1/orders?status=pending_pickup`          | 1           |
+|                                     | Detail order `/orders/{orderId}`                   | staff          | `GET /v1/orders/{orderId}`                      | 1           |
+|                                     | Aksi Terima                                        | staff          | `POST /v1/orders/{orderId}/fulfilment`          | 1           |
+| **W2 — Staff menugaskan driver**    | Panel penugasan `/orders/{orderId}/assign`         | staff          | `GET /v1/orders/{orderId}` + `POST /v1/pickups` | 2           |
+| **W3 — Staff memantau pickup**      | Daftar pickup `/pickups` (polled)                  | staff          | `GET /v1/pickups`                               | 1           |
+| **W4 — Customer membuat order**     | Form order baru `/orders/new`                      | customer       | `POST /v1/orders`                               | 1           |
+|                                     | Order saya `/orders`                               | customer       | `GET /v1/orders`                                | 1           |
+| **W5 — Customer membatalkan order** | Detail order `/orders/{orderId}`                   | customer       | `GET /v1/orders/{orderId}`                      | 1           |
+|                                     | Konfirmasi pembatalan                              | customer       | `POST /v1/orders/{orderId}/cancellation`        | 1           |
+
+### Menjalankan client web
+
+Client memakai Next.js dengan Tailwind CSS v4 dan design token inline pada
+`clients/web/app/globals.css`; semua request API/OIDC dipusatkan di
+[`clients/web/src/lib/api.ts`](clients/web/src/lib/api.ts). Salin
+`clients/web/.env.example` menjadi `.env.local`, isi issuer dan client ID OIDC,
+lalu jalankan. Next.js development berjalan pada `http://localhost:3000`. Untuk
+development, service perlu mengizinkan origin tersebut melalui
+`CORS_ALLOWED_ORIGINS`:
+
+```bash
+pnpm --dir clients/web install
+pnpm --dir clients/web dev
+```
+
+Build produksi Next.js yang dipakai Vercel diverifikasi dengan:
+
+```bash
+pnpm --dir clients/web run build
+```
+
+Pemeriksaan kode dijalankan dengan ESLint konfigurasi Next.js:
+
+```bash
+pnpm --dir clients/web run lint
+pnpm --dir clients/web run typecheck
+```
+
+App Router Next.js memakai `app/page.tsx` sebagai landing page publik serta page
+route terpisah di `app/orders`, `app/orders/new`, `app/orders/[orderId]`, dan
+`app/pickups`, sehingga deep link tidak menjadi 404. Route operasional meminta
+login sesuai role akun. Client mengirim `If-None-Match` saat polling collection dan
+`If-Match` pada pembatalan atau klaim order; `412` ditampilkan sebagai konflik
+yang dapat dipulihkan dengan memuat ulang. Mutation memakai UUID v4 yang sama
+sepanjang retry dan memetakan `invalid-params` ke pesan field.
+
+Struktur UI dibagi menjadi tiga lapisan: file `app/**/page.tsx` hanya menjadi
+entry route, section halaman berada di `modules/`, dan elemen kecil yang dipakai
+ulang berada di `components/ui/`. Tombol yang bertuliskan **Masuk** memang
+membuka provider OIDC lokal pada `localhost:8081`; tombol navigasi, aksi order,
+dan **Keluar** tetap diproses di aplikasi pada `localhost:3000`.
 
 ### Alamat aplikasi ter-deploy
 
-_Belum di-deploy._ Bagian ini diisi setelah aplikasi web tersedia di Vercel.
+_Belum di-deploy._ Deploy dibuat dari folder `clients/web` dengan framework
+Next.js. Pada project Vercel, isi **Root Directory** dengan `clients/web` dan
+gunakan build command default Next.js. Tambahkan `NEXT_PUBLIC_API_BASE_URL`,
+`NEXT_PUBLIC_OIDC_ISSUER`, `NEXT_PUBLIC_OIDC_CLIENT_ID`,
+`NEXT_PUBLIC_OIDC_REDIRECT_URI`, `NEXT_PUBLIC_OIDC_AUDIENCE`, dan
+`NEXT_PUBLIC_OIDC_SCOPE` pada environment production. Setelah URL Vercel tersedia,
+daftarkan URL callback `/callback` dan URL asalnya pada provider OIDC, lalu
+ganti placeholder di bagian ini dan `NEXT_PUBLIC_OIDC_REDIRECT_URI` dengan URL final.
 
 ### Akun uji untuk presentasi
 
-| Username | Role | Domain identity | Data yang dipegang |
-|---|---|---|---|
-| `staff-outlet-a` | staff | `outlet_a` | Order yang terikat `outlet_a` |
-| `student-a` | customer | `cus_studentA` | Order miliknya sendiri |
+| Username         | Role     | Domain identity | Data yang dipegang            |
+| ---------------- | -------- | --------------- | ----------------------------- |
+| `staff-outlet-a` | staff    | `outlet_a`      | Order yang terikat `outlet_a` |
+| `student-a`      | customer | `cus_studentA`  | Order miliknya sendiri        |
 
 Password akun uji tidak ditulis di repository. Nilainya ada pada
 `auth/keycloak/.runtime/credentials.json` untuk provider lokal, dan pada
@@ -344,16 +405,16 @@ diperbaiki beserta test regresinya.
 Cloudflare meng-encode ulang respons JSON dengan Brotli, dan ketika sebuah
 intermediary mentransformasi representasi ia **melemahkan** validator menjadi
 `W/"..."` — perilaku yang benar menurut RFC 9110. Yang tidak benar adalah
-akibatnya di sisi kami: `If-Match` dibandingkan dengan *strong comparison*,
+akibatnya di sisi kami: `If-Match` dibandingkan dengan _strong comparison_,
 sehingga tag weak tidak akan pernah cocok dan browser menerima `412` pada
 write **pertama**, bukan hanya saat konflik.
 
 Diukur langsung terhadap deployment:
 
-| Request | ETag diterima | Encoding |
-|---|---|---|
-| default (browser) | `W/"aiNfDU1j..."` | `br` |
-| `Accept-Encoding: identity` | `"aiNfDU1j..."` | — |
+| Request                     | ETag diterima     | Encoding |
+| --------------------------- | ----------------- | -------- |
+| default (browser)           | `W/"aiNfDU1j..."` | `br`     |
+| `Accept-Encoding: identity` | `"aiNfDU1j..."`   | —        |
 
 Perbaikannya: `matchesIfMatch` membandingkan **nilai** validator dan
 mengabaikan prefix weak. Aman di sini karena tag ini adalah penanda versi
@@ -397,14 +458,14 @@ Layar yang tidak dapat dibangun dari operasi yang dipublikasikan adalah temuan
 tentang kontrak, bukan alasan menambah endpoint (aturan P5 §0.1). Berikut yang
 tercatat:
 
-| # | Temuan | Dampak pada client |
-|---|---|---|
-| 1 | Tidak ada operasi daftar driver, padahal `CreatePickupRequest.driverId` wajib | Form penugasan driver (W2) memerlukan `driverId` yang tidak dapat ditemukan lewat API |
-| 2 | Tidak ada `GET /v1/pickups/{pickupId}` | `ETag` per-pickup tidak dapat diperoleh, sehingga conditional write pada `collectPickup` tidak dapat dibangun dari operasi yang ada |
-| 3 | State machine tidak lengkap: service hanya pernah menulis `pending_pickup`, `processing`, `cancelled` (order) dan `assigned`, `picked_up` (pickup) | Status `ready_for_pickup`, `confirmed`, `assigned`, `completed`, dan `delivered` ada di enum tetapi tidak pernah dicapai |
-| 4 | `400` vs `422` tidak sepenuhnya mengikuti pembacaan RFC 9457: kegagalan nilai field (mis. `weightKg` di bawah minimum) dijawab `422` | Client menangani keduanya; `invalid-params` menempelkan pesan pada field yang tepat |
-| 5 | Tidak ada operasi sign-out di kontrak | Client memanggil `end_session_endpoint` dan `revocation_endpoint` provider |
-| 6 | `CreateOrderRequest.customerId` meminta identitas yang sudah ada pada token | Client membaca `fixture_domain_id` dari token |
+| #   | Temuan                                                                                                                                             | Dampak pada client                                                                                                                  |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Tidak ada operasi daftar driver, padahal `CreatePickupRequest.driverId` wajib                                                                      | Form penugasan driver (W2) memerlukan `driverId` yang tidak dapat ditemukan lewat API                                               |
+| 2   | Tidak ada `GET /v1/pickups/{pickupId}`                                                                                                             | `ETag` per-pickup tidak dapat diperoleh, sehingga conditional write pada `collectPickup` tidak dapat dibangun dari operasi yang ada |
+| 3   | State machine tidak lengkap: service hanya pernah menulis `pending_pickup`, `processing`, `cancelled` (order) dan `assigned`, `picked_up` (pickup) | Status `ready_for_pickup`, `confirmed`, `assigned`, `completed`, dan `delivered` ada di enum tetapi tidak pernah dicapai            |
+| 4   | `400` vs `422` tidak sepenuhnya mengikuti pembacaan RFC 9457: kegagalan nilai field (mis. `weightKg` di bawah minimum) dijawab `422`               | Client menangani keduanya; `invalid-params` menempelkan pesan pada field yang tepat                                                 |
+| 5   | Tidak ada operasi sign-out di kontrak                                                                                                              | Client menghapus sesi lokal dan mencoba `revocation_endpoint` provider tanpa redirect keluar dari origin web                         |
+| 6   | `CreateOrderRequest.customerId` meminta identitas yang sudah ada pada token                                                                        | Client membaca `fixture_domain_id` dari token                                                                                       |
 
 Temuan 1 dan 2 belum diselesaikan dan **tidak** ditambal dengan endpoint baru,
 sesuai aturan tugas.

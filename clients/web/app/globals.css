@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fdfdfd;
+  --foreground: #171717;
+  --font-google-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-google-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-google-sans);
+  --font-mono: var(--font-google-code);
+
+  --color-neutral-100: #ededed;
+  --color-neutral-200: #e8e8e8;
+  --color-neutral-300: #d2d2d2;
+  --color-neutral-400: #bbbbbb;
+  --color-neutral-500: #a4a4a4;
+  --color-neutral-600: #8e8e8e;
+  --color-neutral-700: #777777;
+  --color-neutral-800: #606060;
+  --color-neutral-900: #4a4a4a;
+  --color-neutral-1000: #333333;
+
+  --color-primary-100: #d6c6e1;
+  --color-primary-200: #c2a9d2;
+  --color-primary-300: #ae8cc3;
+  --color-primary-400: #996fb4;
+  --color-primary-500: #8555a3;
+  --color-primary-600: #6d4687;
+  --color-primary-700: #56376a;
+  --color-primary-800: #442b54;
+  --color-primary-900: #32203d;
+  --color-primary-1000: #201427;
+
+  --color-black-100: #b6b6b6;
+  --color-black-200: #929292;
+  --color-black-300: #6d6d6d;
+  --color-black-400: #494949;
+  --color-black-500: #242424;
+  --color-black-600: #000000;
+
+  --color-blue-100: #8cb9e5;
+  --color-blue-200: #5396d9;
+  --color-blue-300: #2a73bb;
+  --color-blue-400: #1d5082;
+  --color-blue-500: #112e4b;
+
+  --color-red-100: #ed8888;
+  --color-red-200: #e54d4d;
+  --color-red-300: #cf1f1f;
+  --color-red-400: #931616;
+  --color-red-500: #580d0d;
+
+  --color-yellow-100: #f3dd8d;
+  --color-yellow-200: #eccc54;
+  --color-yellow-300: #e6bb1a;
+  --color-yellow-400: #ae8d13;
+  --color-yellow-500: #62500b;
+
+  --color-green-100: #b8d898;
+  --color-green-200: #94c565;
+  --color-green-300: #71a53e;
+  --color-green-400: #4e722b;
+  --color-green-500: #2d4219;
+}
+
+@utility font-h1 { font-family: var(--font-google-sans), sans-serif; font-size: 58px; font-weight: 700; line-height: 1.5; }
+@utility font-h2 { font-family: var(--font-google-sans), sans-serif; font-size: 48px; font-weight: 700; line-height: 1.5; }
+@utility font-h3 { font-family: var(--font-google-sans), sans-serif; font-size: 40px; font-weight: 700; line-height: 1.5; }
+@utility font-h4 { font-family: var(--font-google-sans), sans-serif; font-size: 34px; font-weight: 700; line-height: 1.5; }
+@utility font-h5 { font-family: var(--font-google-sans), sans-serif; font-size: 28px; font-weight: 700; line-height: 1.5; }
+@utility font-h6 { font-family: var(--font-google-sans), sans-serif; font-size: 24px; font-weight: 700; line-height: 1.5; }
+@utility font-h7 { font-family: var(--font-google-sans), sans-serif; font-size: 20px; line-height: 1.5; }
+@utility font-b1 { font-family: var(--font-google-sans), sans-serif; font-size: 16px; line-height: 1.5; }
+@utility font-b2 { font-family: var(--font-google-sans), sans-serif; font-size: 14px; line-height: 1.5; }
+@utility font-b3 { font-family: var(--font-google-sans), sans-serif; font-size: 12px; line-height: 1.5; }
+@utility font-b4 { font-family: var(--font-google-sans), sans-serif; font-size: 10px; line-height: 1.5; }
+@utility font-b5 { font-family: var(--font-google-sans), sans-serif; font-size: 8px; line-height: 1.5; }
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { min-width: 320px; background: var(--background); color: var(--foreground); font-family: var(--font-google-sans), sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  button, input, select, textarea { font: inherit; }
+  button { cursor: pointer; }
+}
+
+@keyframes pulse { 50% { opacity: 0.45; } }
