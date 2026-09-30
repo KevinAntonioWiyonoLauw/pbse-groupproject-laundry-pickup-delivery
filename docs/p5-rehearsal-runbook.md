@@ -39,7 +39,34 @@ Dua akun uji, role berbeda, dengan data siap pakai:
 | `staff-outlet-a` | staff | `outlet_a` | Minimal satu order `pending_pickup` (antrean W1) |
 | `student-a` | customer | `cus_studentA` | Order miliknya sendiri; satu order `processing` untuk uji penolakan `409` |
 
-### 2.1 Membuat order via aplikasi (manual, paling sederhana)
+### 2.1 Cara cepat: skrip seed (disarankan)
+
+Dua tool di `tools/` melakukan ini terhadap deployment. Keduanya memakai token
+asli (PKCE) dan tidak pernah mencetak token.
+
+```bash
+# Lihat isi database demo saat ini (read-only, hitung per status):
+node tools/p5-demo-recon.mjs \
+  https://pbse.kevinio.my.id \
+  https://keycloak-production-68f0.up.railway.app \
+  https://pbse-laundry.kevinio.my.id
+
+# Top up supaya ada 2 pending_pickup (untuk W1) — additive, tidak menghapus:
+node tools/p5-seed-demo.mjs \
+  https://pbse.kevinio.my.id \
+  https://keycloak-production-68f0.up.railway.app \
+  https://pbse-laundry.kevinio.my.id
+```
+
+Hasil yang diharapkan dari `p5-demo-recon.mjs` setelah seed:
+
+```text
+student-a (customer): 3 order
+   - pending_pickup: 2
+   - processing: 1
+```
+
+### 2.2 Cara manual via aplikasi (cadangan)
 
 1. Login `student-a` di aplikasi produksi.
 2. Buka `/orders/new`, isi `serviceType=wash_fold`, `weightKg=3`,
@@ -48,20 +75,6 @@ Dua akun uji, role berbeda, dengan data siap pakai:
 4. Login `staff-outlet-a`, terima satu order (W1). → order menjadi `processing`
    dan `outletId=outlet_a`. Order inilah yang dipakai butir demonstrasi 2
    (penolakan `409`: `student-a` mencoba membatalkan order `processing`).
-
-### 2.2 Membuat order via skrip (opsional, idempoten per run)
-
-Gunakan `node:` dengan token asli dari provider — pola yang sama dengan
-`auth/keycloak/e2e-proof.mjs`, tetapi diarahkan ke deployment produksi:
-
-```bash
-# Token harus diperoleh lewat PKCE (login nyata); jangan pernah menaruh token
-# di URL, log, atau argumen command line yang terekam.
-```
-
-Karena `POST /v1/orders` memerlukan token customer asli, cara paling aman adalah
-**2.1 lewat browser**. Skrip hanya dianjurkan bila token sudah dipegang di
-memori secara aman.
 
 ---
 
