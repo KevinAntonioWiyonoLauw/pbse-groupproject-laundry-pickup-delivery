@@ -44,9 +44,18 @@ cek(/credentials\.users\[username\] \?\? secret\(\)/.test(source),
   "password yang sudah ada dipakai ulang, bukan di-generate ulang");
 
 // --- 2. jalankan dua kali, bandingkan --------------------------------------
-if (!fs.existsSync(CREDS)) {
-  cek(false, "credentials.json ada sebelum pengujian", "jalankan prepare.mjs lebih dulu");
-} else {
+//
+// `credentials.json` is gitignored (it holds secrets), so on a fresh checkout —
+// CI, or anyone who just cloned — `.runtime/` does not exist yet. The test must
+// therefore GENERATE the files itself via `prepare.mjs` before it can check that
+// running the script again does not change them. Bootstrap once, then run twice
+// more and assert the credentials are stable across those later runs. Requiring
+// the file to pre-exist only proved the tester's machine had run the script
+// before, which is exactly the assumption that breaks CI.
+run(); // bootstrap: create .runtime/credentials.json if absent, preserve if present
+cek(fs.existsSync(CREDS), "prepare.mjs menghasilkan credentials.json");
+
+if (fs.existsSync(CREDS)) {
   const credsBefore = hash(CREDS);
   const templateBefore = hash(TEMPLATE);
 
