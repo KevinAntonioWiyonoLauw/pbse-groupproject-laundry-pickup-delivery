@@ -200,14 +200,14 @@ async function main() {
   const preflight = await fetch(`${api}/v1/orders`, {
     method: 'OPTIONS',
     headers: {
-      Origin: 'webOrigin',
+      Origin: webOrigin,
       'Access-Control-Request-Method': 'POST',
       'Access-Control-Request-Headers': 'authorization,idempotency-key,if-match',
     },
   });
   const acao = preflight.headers.get('access-control-allow-origin');
   check(preflight.status === 204, `CORS preflight -> 204 (got ${preflight.status})`);
-  check(acao === 'webOrigin',
+  check(acao === webOrigin,
     `CORS allow-origin echoed for a registered origin (got ${acao ?? 'absent'})`);
   check((preflight.headers.get('access-control-expose-headers') ?? '').includes('ETag'),
     'ETag is exposed so a browser can read it');
