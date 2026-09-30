@@ -114,6 +114,10 @@ async function main() {
   console.log("\n--- Conditional write ---");
   const ok = await call(staffA, `/v1/orders/${order.id}/fulfilment`, { method: "POST", headers: { "If-Match": etagDetail } });
   cek(ok.status === 200, "If-Match benar -> 200", `status=${ok.status}`);
+ 
+  // Tambahan: tangkap state order sebelum percobaan write yang bakal ditolak
+  const beforeStale = await call(staffA, `/v1/orders/${order.id}`);
+  const beforeStaleBody = await beforeStale.json();
 
   // Skenario dua window: window kedua masih memegang ETag LAMA, sementara
   // window pertama sudah menekan Terima. Ini yang menghasilkan 412.
@@ -123,6 +127,12 @@ async function main() {
   cek(staleBody.type === "https://api.example.com/problems/precondition-failed", "412 memakai problem type precondition-failed", `type=${staleBody.type}`);
   cek(/sudah ditangani/i.test(staleBody.detail || ""), "pesan 412 dalam istilah domain", `detail="${staleBody.detail}"`);
 
+  // Tambahan: baca ulang order setelah 412 untuk memastikan representasi order tidak berubah
+  const afterStale = await call(staffA, `/v1/orders/${order.id}`);
+  const afterStaleBody = await afterStale.json();
+  cek(afterStaleBody.status === beforeStaleBody.status, "412 ditolak: status order tidak berubah", `before=${beforeStaleBody.status} after=${afterStaleBody.status}`);
+  cek(afterStaleBody.outletId === beforeStaleBody.outletId, "412 ditolak: outletId order tidak berubah", `before=${beforeStaleBody.outletId} after=${afterStaleBody.outletId}`);
+  cek(JSON.stringify(afterStaleBody) === JSON.stringify(beforeStaleBody), "412 ditolak: representasi order identik byte-for-byte sebelum/sesudah");
   const noMatch = await call(staffA, `/v1/orders/${order.id}/fulfilment`, { method: "POST" });
   cek(noMatch.status === 200, "tanpa If-Match tetap 200 (header opsional, klien lama aman)", `status=${noMatch.status}`);
 

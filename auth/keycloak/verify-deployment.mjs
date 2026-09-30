@@ -14,6 +14,10 @@ import { randomBytes, createHash, randomUUID } from 'node:crypto';
  *   node auth/keycloak/verify-deployment.mjs \
  *     https://pbse.kevinio.my.id \
  *     https://keycloak-production-68f0.up.railway.app
+ *     https://pbse-laundry.vercel.app
+ * 
+ * Argumen ke-3 (web origin) default ke http://localhost:5173 jika
+ * dikosongkan atau dapat diisi lewat environment variable WEB_ORIGIN.
  *
  * Reads fixture passwords from `auth/keycloak/.runtime/credentials.json`
  * (gitignored). No token, password, or secret is printed.
@@ -21,6 +25,7 @@ import { randomBytes, createHash, randomUUID } from 'node:crypto';
 
 const api = (process.argv[2] || '').replace(/\/+$/, '');
 const kc = (process.argv[3] || 'http://localhost:8081').replace(/\/+$/, '');
+const webOrigin = (process.argv[4] || process.env.WEB_ORIGIN || 'http://localhost:5173').replace(/\/+$/, '');
 
 assert.ok(api, 'usage: node auth/keycloak/verify-deployment.mjs <api-origin> <keycloak-origin>');
 
@@ -113,7 +118,7 @@ async function main() {
   console.log(`audience : ${audience} (expected value of OIDC_AUDIENCE)`);
   console.log('');
 
-  const WEB = ['laundry-web', 'http://localhost:5173/callback'];
+  const WEB = ['laundry-web', `${webOrigin}/callback`];
   const MOBILE = ['laundry-mobile', 'id.ac.ugm.laundry://oauth/callback'];
 
   const studentA = await pkceLogin(MOBILE[0], 'student-a', 'orders:read orders:write', MOBILE[1]);
@@ -195,14 +200,14 @@ async function main() {
   const preflight = await fetch(`${api}/v1/orders`, {
     method: 'OPTIONS',
     headers: {
-      Origin: 'http://localhost:5173',
+      Origin: webOrigin,
       'Access-Control-Request-Method': 'POST',
       'Access-Control-Request-Headers': 'authorization,idempotency-key,if-match',
     },
   });
   const acao = preflight.headers.get('access-control-allow-origin');
   check(preflight.status === 204, `CORS preflight -> 204 (got ${preflight.status})`);
-  check(acao === 'http://localhost:5173',
+  check(acao === webOrigin,
     `CORS allow-origin echoed for a registered origin (got ${acao ?? 'absent'})`);
   check((preflight.headers.get('access-control-expose-headers') ?? '').includes('ETag'),
     'ETag is exposed so a browser can read it');

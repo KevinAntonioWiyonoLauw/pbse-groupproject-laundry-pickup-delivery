@@ -1,0 +1,16 @@
+$ node ../tests/web/test-graceful-shutdown.js
+Ringkasan:
+  PASS handler SIGTERM terdaftar di app.js
+  PASS handler SIGINT terdaftar di app.js
+  PASS shutdown memanggil closeDatabase()
+  PASS closeDatabase() didefinisikan
+  PASS closeDatabase() memeriksa handle masih terbuka (idempoten)
+  PASS closeDatabase() lalu exit -> exit code 0 — code=0
+  PASS pemanggilan kedua closeDatabase() aman (idempoten)
+  PASS tidak ada native crash saat menutup handle
+  PASS service menjadi sehat
+  PASS SIGTERM -> exit code 0 — code=0 signal=null
+  PASS log shutdown muncul
+  PASS tidak ada native crash pada SIGTERM
+
+  12 lulus, 0 gagal, 0 dilewati

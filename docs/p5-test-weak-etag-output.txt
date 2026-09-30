@@ -1,0 +1,15 @@
+$ node ../tests/web/test-weak-etag.js
+
+  strong (server)   : "W_ViZa5zVBw81y5WjG9Ij73vfT19zOoe7hbX0tz51Nk"
+  weak   (browser)  : W/"W_ViZa5zVBw81y5WjG9Ij73vfT19zOoe7hbX0tz51Nk"
+
+Ringkasan:
+  PASS server mengirim ETag strong — "W_ViZa5zVBw81y5WjG9...
+  PASS If-Match WEAK diterima (bukan 412) — status=200
+  PASS order benar-benar diterima — status=processing
+  PASS If-Match basi tetap 412 — status=412
+  PASS If-Match asing tetap 412 — status=412
+  PASS If-None-Match WEAK -> 304 — status=304
+  PASS Cache-Control: no-transform dikirim — no-transform
+
+  7 lulus, 0 gagal

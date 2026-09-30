@@ -1,0 +1,43 @@
+$ node ../tests/web/test-web-behaviour.js
+--- CORS ---
+
+--- Visibilitas koleksi + detail staff ---
+
+--- Conditional read ---
+
+--- Conditional write ---
+
+--- A.9 ---
+
+Ringkasan:
+  PASS preflight dijawab 204 — status=204
+  PASS ACAO = origin yang diizinkan
+  PASS If-Match ada di allow-headers
+  PASS ETag ada di expose-headers
+  PASS X-Next-Cursor ada di expose-headers
+  PASS Vary: Origin ada
+  PASS tidak ada Allow-Credentials (Bearer, bukan cookie)
+  PASS origin asing TIDAK di-reflect — ACAO=(absen)
+  PASS Vary: Origin tetap ada pada origin asing
+  PASS preflight TANPA token tetap 204 (bukan 401) — status=204
+  PASS order baru belum terikat outlet — outletId=null
+  PASS staff MELIHAT order pending di antrean masuk — jumlah=1
+  PASS staff dapat MEMBUKA order dari antreannya (list & detail konsisten) — status=200
+  PASS staff outlet lain juga melihat (belum diklaim siapa pun) — status=200
+  PASS ETag list strong (bukan weak) — "ZwbOdXCxBPYf_8KAA2OOdlgIEstj_z8uqIWGfauIodI"
+  PASS polling tak berubah -> 304 — status=304
+  PASS 304 tetap terjadi meski ada Cache-Control: no-cache — status=304
+  PASS detail tak berubah -> 304 — status=304
+  PASS If-Match benar -> 200 — status=200
+  PASS dua window, If-Match basi -> 412 (bukan 404, bukan 200) — status=412
+  PASS 412 memakai problem type precondition-failed — type=https://api.example.com/problems/precondition-failed
+  PASS pesan 412 dalam istilah domain — detail="Order ini sudah ditangani oleh rekan kerja. Muat ulang untuk melihat keadaan terbaru."
+  PASS 412 ditolak: status order tidak berubah — before=processing after=processing
+  PASS 412 ditolak: outletId order tidak berubah — before=outlet_a after=outlet_a
+  PASS 412 ditolak: representasi order identik byte-for-byte sebelum/sesudah
+  PASS tanpa If-Match tetap 200 (header opsional, klien lama aman) — status=200
+  PASS staff outlet lain -> 404 (bukan 412: ini soal kepemilikan, bukan versi) — status=404
+  PASS customer -> operasi staff ditolak — status=403
+  PASS tanpa token -> 401
+
+  29 lulus, 0 gagal
