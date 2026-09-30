@@ -59,6 +59,11 @@ const closer = spawn(process.execPath, ["-e", `
   cwd: SERVICE,
   env: {
     ...process.env,
+    // `config.js` treats PORT as required and calls process.exit(1) without it.
+    // Locally a gitignored service/.env supplies it through dotenv, so its
+    // absence only shows up in CI — where there is no .env — and the child
+    // exited 1 before the database could be opened, failing this check.
+    PORT: String(PORT + 1),
     DATABASE_FILE: dbFile,
     NODE_ENV: "test",
     OIDC_ISSUER: "https://example.invalid/realms/t",
