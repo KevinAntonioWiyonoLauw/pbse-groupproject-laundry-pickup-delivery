@@ -340,7 +340,19 @@ pnpm --dir clients/web run typecheck
 App Router Next.js memakai `app/page.tsx` sebagai landing page publik serta page
 route terpisah di `app/orders`, `app/orders/new`, `app/orders/[orderId]`, dan
 `app/pickups`, sehingga deep link tidak menjadi 404. Route operasional meminta
-login sesuai role akun. Client mengirim `If-None-Match` saat polling collection dan
+login sesuai role akun.
+
+> **Catatan `vercel.json` (keputusan, bukan kelalaian).** Rencana awal
+> (CONTEXT §8 Tahap 6) menyebut `vercel.json` dengan SPA rewrite sebagai wajib.
+> Itu berlaku untuk single-page app berbasis bundler di mana semua path harus
+> diarahkan ke satu `index.html`. Client ini memakai **Next.js App Router**, yang
+> menangani deep link secara native lewat file-system routing: `/orders/ord_x`
+> dirender oleh `app/orders/[orderId]/page.tsx` tanpa perlu rewrite. Karena itu
+> `vercel.json` **sengaja tidak dibuat** — menambahkannya akan menjadi konfigurasi
+> mati. Persyaratan sesungguhnya dari aturan itu ("membuka `/orders/ord_x`
+> langsung tidak menghasilkan halaman kosong", CONTEXT §8 Tahap 6 checkpoint)
+> tetap dipenuhi dan sudah diverifikasi terhadap deployment, lihat baris
+> "seluruh route … merespons `200`" pada ringkasan di atas. Client mengirim `If-None-Match` saat polling collection dan
 `If-Match` pada pembatalan atau klaim order; `412` ditampilkan sebagai konflik
 yang dapat dipulihkan dengan memuat ulang. Mutation memakai UUID v4 yang sama
 sepanjang retry dan memetakan `invalid-params` ke pesan field.
